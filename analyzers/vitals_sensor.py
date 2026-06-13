@@ -7,6 +7,7 @@ class SensorReading:
     finding: str
     confidence: float
     label: str = "Activity"
+    zscore: float = 0.0
 
 
 def run(vitals: dict) -> SensorReading:
