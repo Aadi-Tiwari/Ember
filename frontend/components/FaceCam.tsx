@@ -69,6 +69,7 @@ export default function FaceCam({ onEmotion }: Props) {
   const smoothRef  = useRef<EmotionScores | null>(null);
   const blinkBuf   = useRef<number[]>([]);
   const lastSend   = useRef(0);
+  const lastTs     = useRef(0);
 
   const [phase, setPhase] = useState<"idle" | "loading" | "active">("idle");
   const [error, setError]     = useState("");
@@ -128,23 +129,28 @@ export default function FaceCam({ onEmotion }: Props) {
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     setPhase("idle"); setEmotions(null); setFaceFound(false); setPose(null);
-    smoothRef.current = null; blinkBuf.current = [];
+    smoothRef.current = null; blinkBuf.current = []; lastTs.current = 0;
   }
 
   const detect = useCallback(() => {
     const v = videoRef.current;
     const c = canvasRef.current;
     const ref = landmarkerRef.current;
-    if (!v || !c || !ref || v.readyState < 2) {
+    if (!v || !c || !ref || v.readyState < 2 || !v.videoWidth || !v.videoHeight) {
       rafRef.current = requestAnimationFrame(detect);
       return;
     }
 
-    const { landmarker, FaceLandmarker, DrawingUtils } = ref;
+    const { landmarker, FaceLandmarker } = ref;
+    // VIDEO mode requires strictly monotonically increasing timestamps
+    const ts = Math.max(performance.now(), lastTs.current + 1);
+    lastTs.current = ts;
+
     let results: any;
     try {
-      results = landmarker.detectForVideo(v, performance.now());
-    } catch {
+      results = landmarker.detectForVideo(v, ts);
+    } catch (err: any) {
+      // Skip frame on transient errors (GPU context loss, etc.)
       rafRef.current = requestAnimationFrame(detect);
       return;
     }
