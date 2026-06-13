@@ -146,3 +146,24 @@ async def _push_live(ws: WebSocket):
 @app.get("/health")
 async def health():
     return {"status": "ok", "events": store.message_count(), "vitals": store.get_vitals() is not None}
+
+
+@app.get("/live-score")
+async def live_score():
+    """Returns the latest risk score from the event store for the counselor view."""
+    vitals = store.get_vitals()
+    if vitals is None:
+        return {"score": None, "sources": {"activity": False, "discord": False}}
+
+    from analyzers.vitals_sensor import run as vitals_run
+    reading = vitals_run(vitals)
+
+    from engine.anomaly_filter import filter_readings
+    from engine.signal_fusion import fuse
+    filtered = filter_readings([reading])
+    risk_score = fuse(filtered)
+
+    return {
+        "score": risk_score,
+        "sources": {"activity": True, "discord": store.message_count() >= 10},
+    }
