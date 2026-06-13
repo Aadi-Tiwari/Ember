@@ -19,6 +19,11 @@ export type AnalysisState = {
 const WS_URL = process.env.NEXT_PUBLIC_API_WS ?? "ws://localhost:8000/ws/analyze";
 const REST_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+function authHeaders(): HeadersInit {
+  const token = typeof window !== "undefined" ? localStorage.getItem("pc_token") : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function useAnalysis() {
   const [state, setState] = useState<AnalysisState>({
     status: "idle",
@@ -69,7 +74,7 @@ export function useAnalysis() {
   const runDemo = useCallback(async (scenario: "healthy" | "crisis") => {
     setState({ status: "running", readings: [], riskScore: null, daysToThreshold: null, error: null });
     try {
-      const res = await fetch(`${REST_URL}/demo/${scenario}`);
+      const res = await fetch(`${REST_URL}/demo/${scenario}`, { headers: authHeaders() });
       const data = await res.json();
       runWithMetadata(data.metadata);
     } catch {
@@ -82,7 +87,7 @@ export function useAnalysis() {
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch(`${REST_URL}/parse`, { method: "POST", body: form });
+      const res = await fetch(`${REST_URL}/parse`, { method: "POST", body: form, headers: authHeaders() });
       const data = await res.json();
       runWithMetadata(data.metadata, sentimentText);
     } catch {

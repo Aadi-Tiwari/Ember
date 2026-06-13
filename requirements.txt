@@ -10,3 +10,5 @@ requests
 pynput
 discord.py
 python-dotenv
+aiosqlite
+PyJWT
