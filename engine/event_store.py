@@ -62,5 +62,39 @@ class EventStore:
         with self._lock:
             return sum(1 for e in self._events if e.type == "message")
 
+    def get_messages_by_author(self) -> dict:
+        """
+        Groups message events by author_hash.
+        Returns {author_hash: {recent: [...], baseline: [...], last_seen: datetime}}
+        Used by the counselor dashboard to show per-user risk scores.
+        """
+        now = datetime.now(timezone.utc)
+        recent_cutoff = now - timedelta(days=14)
+        baseline_cutoff = now - timedelta(days=28)
+
+        with self._lock:
+            messages = [e for e in self._events if e.type == "message"]
+
+        by_author: dict = {}
+        for e in messages:
+            ts = e.timestamp
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+
+            author = e.data.get("author_hash", "unknown")
+            if author not in by_author:
+                by_author[author] = {"recent": [], "baseline": [], "last_seen": ts}
+
+            if ts > by_author[author]["last_seen"]:
+                by_author[author]["last_seen"] = ts
+
+            entry = {**e.data, "timestamp": ts}
+            if ts >= recent_cutoff:
+                by_author[author]["recent"].append(entry)
+            elif ts >= baseline_cutoff:
+                by_author[author]["baseline"].append(entry)
+
+        return by_author
+
 
 store = EventStore()

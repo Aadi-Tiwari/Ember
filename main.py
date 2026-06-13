@@ -148,6 +148,87 @@ async def health():
     return {"status": "ok", "events": store.message_count(), "vitals": store.get_vitals() is not None}
 
 
+@app.get("/counselor-data")
+async def counselor_data():
+    """
+    Groups ingested message events by author_hash and runs per-author analysis.
+    Returns real behavioral risk scores - no hardcoded data.
+    If Discord bot is connected, each person in the server appears as a row.
+    """
+    from collections import defaultdict
+    from analyzers import timing, frequency, volume
+    from engine.anomaly_filter import filter_readings
+    from engine.signal_fusion import fuse
+
+    by_author = store.get_messages_by_author()
+    now = datetime.now(timezone.utc)
+    results = []
+
+    for author, data in by_author.items():
+        if len(data["recent"]) < 3 and len(data["baseline"]) < 3:
+            continue
+
+        metadata = {"recent": data["recent"], "baseline": data["baseline"]}
+        loop = asyncio.get_event_loop()
+        readings = list(await asyncio.gather(
+            loop.run_in_executor(None, timing, metadata),
+            loop.run_in_executor(None, frequency, metadata),
+            loop.run_in_executor(None, volume, metadata),
+        ))
+
+        filtered = filter_readings(readings)
+        risk_score = round(fuse(filtered))
+
+        ls: datetime = data["last_seen"]
+        if ls.tzinfo is None:
+            ls = ls.replace(tzinfo=timezone.utc)
+        delta = now - ls
+        secs = delta.total_seconds()
+        if secs < 60:
+            last_active = "just now"
+        elif secs < 3600:
+            last_active = f"{int(secs / 60)}m ago"
+        elif secs < 86400:
+            last_active = f"{int(secs / 3600)}h ago"
+        else:
+            last_active = f"{int(delta.days)}d ago"
+
+        trend = "rising" if risk_score >= 60 else "falling" if risk_score < 30 else "stable"
+
+        results.append({
+            "id": author[:8],
+            "score": risk_score,
+            "trend": trend,
+            "last_active": last_active,
+            "days_to_threshold": max(1, round(30 - risk_score * 0.28)) if risk_score >= 60 else None,
+        })
+
+    # Sort by risk score descending
+    results.sort(key=lambda r: r["score"], reverse=True)
+
+    # Prepend live user if vitals exist
+    vitals = store.get_vitals()
+    if vitals:
+        from analyzers.vitals_sensor import run as vitals_run
+        reading = vitals_run(vitals)
+        filtered = filter_readings([reading])
+        live_score = round(fuse(filtered))
+        trend = "rising" if live_score >= 60 else "falling" if live_score < 30 else "stable"
+        results.insert(0, {
+            "id": "You (live)",
+            "score": live_score,
+            "trend": trend,
+            "last_active": "now",
+            "days_to_threshold": max(1, round(30 - live_score * 0.28)) if live_score >= 60 else None,
+            "is_live": True,
+        })
+
+    return {
+        "students": results,
+        "has_discord": store.message_count() >= 3,
+    }
+
+
 @app.get("/live-score")
 async def live_score():
     """Returns the latest risk score from the event store for the counselor view."""

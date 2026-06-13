@@ -446,18 +446,11 @@ export default function Home() {
 type StudentRow = {
   id: string;
   score: number;
-  days: number | null;
+  days_to_threshold: number | null;
   trend: "rising" | "stable" | "falling";
-  lastActive: string;
-  isLive?: boolean;
+  last_active: string;
+  is_live?: boolean;
 };
-
-const SIMULATED: StudentRow[] = [
-  { id: "S-001", score: 74, days: 8, trend: "rising", lastActive: "2h ago" },
-  { id: "S-002", score: 41, days: null, trend: "stable", lastActive: "1d ago" },
-  { id: "S-003", score: 88, days: 3, trend: "rising", lastActive: "30m ago" },
-  { id: "S-004", score: 22, days: null, trend: "falling", lastActive: "3d ago" },
-];
 
 function getColor(score: number) {
   if (score < 30) return "#22c55e";
@@ -467,34 +460,34 @@ function getColor(score: number) {
 }
 
 function CounselorView() {
-  const [liveScore, setLiveScore] = useState<number | null>(null);
+  const [rows, setRows] = useState<StudentRow[]>([]);
+  const [hasDiscord, setHasDiscord] = useState(false);
   const [loading, setLoading] = useState(true);
   const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-  useEffect(() => {
-    fetch(`${API_URL}/live-score`)
+  const fetchData = () => {
+    fetch(`${API_URL}/counselor-data`)
       .then((r) => r.json())
       .then((d) => {
-        setLiveScore(d.score ?? null);
+        setRows(d.students ?? []);
+        setHasDiscord(d.has_discord ?? false);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [API_URL]);
+  };
 
-  const liveRow: StudentRow | null = liveScore !== null
-    ? {
-        id: "You (this session)",
-        score: Math.round(liveScore),
-        days: liveScore > 60 ? Math.max(1, Math.round(30 - liveScore * 0.3)) : null,
-        trend: liveScore > 60 ? "rising" : liveScore < 30 ? "falling" : "stable",
-        lastActive: "now",
-        isLive: true,
-      }
-    : null;
+  useEffect(() => {
+    fetchData();
+    const t = setInterval(fetchData, 10_000);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const rows: StudentRow[] = liveRow ? [liveRow, ...SIMULATED] : SIMULATED;
-  const avg = Math.round(rows.reduce((a, s) => a + s.score, 0) / rows.length);
+  const avg = rows.length > 0
+    ? Math.round(rows.reduce((a, s) => a + s.score, 0) / rows.length)
+    : 0;
   const highRisk = rows.filter((s) => s.score >= 70).length;
+  const hasData = rows.length > 0;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6">
@@ -502,22 +495,30 @@ function CounselorView() {
         <div>
           <h2 className="text-xl font-bold">Counselor Dashboard</h2>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Anonymized behavioral risk scores. No message content is accessible.
+            Anonymized behavioral risk scores from real sessions. No message content accessible.
           </p>
         </div>
-        <span
-          className="text-xs px-2 py-1 rounded-lg"
-          style={{ background: "rgba(245,158,11,0.1)", color: "var(--amber)", border: "1px solid rgba(245,158,11,0.2)" }}
-        >
-          {liveRow ? "Live + simulated" : "Simulated students"}
-        </span>
+        <div className="flex items-center gap-2">
+          {hasDiscord && (
+            <span className="text-xs px-2 py-1 rounded-lg" style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)" }}>
+              Discord connected
+            </span>
+          )}
+          <button
+            onClick={fetchData}
+            className="text-xs px-2 py-1 rounded-lg"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Students monitored", value: rows.length, color: "var(--text)" },
-          { label: "Avg risk score", value: loading ? "..." : avg, color: getColor(avg) },
-          { label: "High risk alerts", value: highRisk, color: highRisk > 0 ? "#ef4444" : "#22c55e" },
+          { label: "Users monitored", value: loading ? "..." : rows.length, color: "var(--text)" },
+          { label: "Avg risk score", value: loading ? "..." : (hasData ? avg : "--"), color: hasData ? getColor(avg) : "var(--muted)" },
+          { label: "High risk alerts", value: loading ? "..." : highRisk, color: highRisk > 0 ? "#ef4444" : "#22c55e" },
         ].map((c) => (
           <div key={c.label} className="rounded-2xl p-5 flex flex-col gap-1" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
             <span className="text-2xl font-bold" style={{ color: c.color }}>{c.value}</span>
@@ -526,69 +527,93 @@ function CounselorView() {
         ))}
       </div>
 
-      <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div
-          className="grid grid-cols-5 px-5 py-3 text-xs font-medium"
-          style={{ background: "var(--surface)", color: "var(--muted)", borderBottom: "1px solid var(--border)" }}
-        >
-          <span>Student ID</span>
-          <span>Risk Score</span>
-          <span>Trend</span>
-          <span>Days to threshold</span>
-          <span>Last active</span>
-        </div>
-        {rows.map((s, i) => (
-          <motion.div
-            key={s.id}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.06 }}
-            className="grid grid-cols-5 px-5 py-4 text-sm items-center"
-            style={{
-              background: s.isLive
-                ? "rgba(245,158,11,0.05)"
-                : i % 2 === 0 ? "var(--surface)" : "var(--surface-2)",
-              borderBottom: "1px solid var(--border)",
-              borderLeft: s.isLive ? "2px solid rgba(245,158,11,0.4)" : "2px solid transparent",
-            }}
-          >
-            <span className="font-mono text-xs">
-              {s.id}
-              {s.isLive && (
-                <span className="ml-1.5 text-xs px-1 py-0.5 rounded" style={{ background: "rgba(245,158,11,0.15)", color: "var(--amber)" }}>
-                  live
-                </span>
-              )}
-            </span>
-            <span className="font-bold tabular-nums" style={{ color: getColor(s.score) }}>{s.score}</span>
-            <span
-              className="text-xs"
-              style={{ color: s.trend === "rising" ? "#ef4444" : s.trend === "falling" ? "#22c55e" : "var(--muted)" }}
-            >
-              {s.trend === "rising" ? "Rising" : s.trend === "falling" ? "Improving" : "Stable"}
-            </span>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>
-              {s.days !== null ? `~${s.days} days` : "None"}
-            </span>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>{s.lastActive}</span>
+      {loading && (
+        <div className="rounded-2xl p-8 flex items-center justify-center" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }}>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>Loading real data...</span>
           </motion.div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      {!liveRow && !loading && (
-        <div
-          className="rounded-xl p-3 text-xs text-center"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}
-        >
-          Run a live session in "My Scan" to see your own data appear here in real time.
+      {!loading && !hasData && (
+        <div className="rounded-2xl p-8 flex flex-col items-center gap-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <p className="text-sm font-medium">No user data yet</p>
+          <p className="text-xs text-center max-w-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            To populate this view with real data, either:
+          </p>
+          <div className="flex flex-col gap-2 w-full max-w-sm">
+            <div className="rounded-xl p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              <p className="text-xs font-medium mb-1">Option 1 - Go Live</p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>Click "My Scan" tab and hit "Go Live". Your session appears here immediately.</p>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              <p className="text-xs font-medium mb-1">Option 2 - Discord Bot</p>
+              <code className="text-xs block mt-1" style={{ color: "#22c55e" }}>
+                python monitor/discord_monitor.py
+              </code>
+              <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Each person in the server becomes a real row with their behavioral score.</p>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              <p className="text-xs font-medium mb-1">Option 3 - Upload export</p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>Upload a Discord server export. Multi-user exports generate a row per person.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && hasData && (
+        <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          <div
+            className="grid grid-cols-5 px-5 py-3 text-xs font-medium"
+            style={{ background: "var(--surface)", color: "var(--muted)", borderBottom: "1px solid var(--border)" }}
+          >
+            <span>User ID</span>
+            <span>Risk Score</span>
+            <span>Trend</span>
+            <span>Days to threshold</span>
+            <span>Last active</span>
+          </div>
+          {rows.map((s, i) => (
+            <motion.div
+              key={s.id}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="grid grid-cols-5 px-5 py-4 text-sm items-center"
+              style={{
+                background: s.is_live
+                  ? "rgba(245,158,11,0.05)"
+                  : i % 2 === 0 ? "var(--surface)" : "var(--surface-2)",
+                borderBottom: "1px solid var(--border)",
+                borderLeft: s.is_live ? "2px solid rgba(245,158,11,0.5)" : "2px solid transparent",
+              }}
+            >
+              <span className="font-mono text-xs flex items-center gap-1.5">
+                {s.id}
+                {s.is_live && (
+                  <span className="text-xs px-1 py-0.5 rounded" style={{ background: "rgba(245,158,11,0.15)", color: "var(--amber)" }}>
+                    live
+                  </span>
+                )}
+              </span>
+              <span className="font-bold tabular-nums" style={{ color: getColor(s.score) }}>{s.score}</span>
+              <span className="text-xs" style={{ color: s.trend === "rising" ? "#ef4444" : s.trend === "falling" ? "#22c55e" : "var(--muted)" }}>
+                {s.trend === "rising" ? "Rising" : s.trend === "falling" ? "Improving" : "Stable"}
+              </span>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                {s.days_to_threshold !== null ? `~${s.days_to_threshold} days` : "None"}
+              </span>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>{s.last_active}</span>
+            </motion.div>
+          ))}
         </div>
       )}
 
       <div className="rounded-2xl p-4 flex items-start gap-3" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
         <Shield size={16} color="var(--amber)" className="shrink-0 mt-0.5" />
         <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
-          Student IDs are one-way hashed and cannot be reverse-mapped. In a real deployment, students opt in
-          and counselors only see aggregate risk scores - never message content.
+          User IDs are one-way hashed and cannot be reverse-mapped. Behavioral scores are derived from
+          timing metadata only - no message content is ever read, stored, or transmitted.
         </p>
       </div>
     </motion.div>
