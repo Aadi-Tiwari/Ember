@@ -11,6 +11,7 @@ import ResourceCard from "../components/ResourceCard";
 import LiveBadge from "../components/LiveBadge";
 import VitalsRow from "../components/VitalsRow";
 import FaceCam, { type EmotionScores } from "../components/FaceCam";
+import AttentionWeights from "../components/AttentionWeights";
 import { useAnalysis } from "../hooks/useAnalysis";
 import { useLiveStream } from "../hooks/useLiveStream";
 import { useActivityTracker } from "../hooks/useActivityTracker";
@@ -409,6 +410,13 @@ export default function Home() {
                       <h2 className="text-sm font-semibold">Sensor Readings</h2>
                       <SensorGrid readings={displayReadings} isRunning={batchRunning} />
                     </div>
+                  )}
+
+                  {batchDone && analysis.state.attentionWeights.length > 0 && (
+                    <AttentionWeights
+                      weights={analysis.state.attentionWeights}
+                      divergenceDaysAgo={analysis.state.divergenceDaysAgo}
+                    />
                   )}
 
                   {batchDone && analysis.state.riskScore !== null && (

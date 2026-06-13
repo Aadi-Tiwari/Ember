@@ -179,15 +179,16 @@ async def _push_live(ws: WebSocket):
     from engine.anomaly_filter import filter_readings
     from engine.signal_fusion import fuse
     filtered = filter_readings(readings)
-    risk_score = fuse(filtered)
+    risk_score, attention_weights = fuse(filtered)
 
     await ws.send_text(json.dumps({
         "type": "update",
         "readings": [
-            {"label": r.label, "score": r.score, "finding": r.finding, "confidence": round(r.confidence, 2)}
+            {"label": r.label, "score": r.score, "finding": r.finding, "confidence": round(r.confidence, 2), "zscore": round(getattr(r, "zscore", 0.0), 2)}
             for r in readings
         ],
         "risk_score": risk_score,
+        "attention_weights": attention_weights,
         "vitals": {
             "mouse_velocity": vitals.get("mouse_velocity_px_s", 0),
             "key_rate": vitals.get("key_rate_per_min", 0),
@@ -264,7 +265,8 @@ async def counselor_data(user=Depends(optional_user)):
         from engine.signal_fusion import fuse
         reading = vitals_run(vitals)
         filtered = filter_readings([reading])
-        live_score = round(fuse(filtered))
+        live_score, _ = fuse(filtered)
+        live_score = round(live_score)
         trend = "rising" if live_score >= 60 else "falling" if live_score < 30 else "stable"
         results.insert(0, {
             "id": "Live session",
@@ -289,7 +291,8 @@ async def live_score():
     from engine.signal_fusion import fuse
     reading = vitals_run(vitals)
     filtered = filter_readings([reading])
-    return {"score": round(fuse(filtered))}
+    score, _ = fuse(filtered)
+    return {"score": round(score)}
 
 
 @app.get("/health")

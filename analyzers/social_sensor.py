@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from collections import defaultdict
+from .zscore import zscore_risk
 
 
 @dataclass
@@ -7,31 +9,45 @@ class SensorReading:
     finding: str
     confidence: float
     label: str = "Social Graph"
+    zscore: float = 0.0
+
+
+def _weekly_channel_counts(msgs: list) -> list[int]:
+    """Returns unique channel count per 7-day window."""
+    if not msgs:
+        return []
+    by_week: dict = defaultdict(set)
+    for m in msgs:
+        week = m["timestamp"].isocalendar()[1]
+        by_week[week].add(m["channel_hash"])
+    return [len(v) for v in by_week.values()]
 
 
 def run(metadata: dict) -> SensorReading:
     """
-    Tracks shrinkage in the number of unique conversations.
-    A contracting social circle is one of the earliest withdrawal indicators.
+    Tracks contraction of unique conversations relative to YOUR baseline.
+    An introvert's small social graph won't flag - only shrinkage matters.
     """
     recent = metadata["recent"]
     baseline = metadata["baseline"]
 
-    recent_contacts = len(set(m["channel_hash"] for m in recent))
-    baseline_contacts = len(set(m["channel_hash"] for m in baseline))
+    bl_weekly = _weekly_channel_counts(baseline)
+    cu_weekly = _weekly_channel_counts(recent)
 
-    if baseline_contacts == 0:
-        return SensorReading(score=0, finding="Insufficient baseline data", confidence=0.0, label="Social Graph")
+    recent_channels = len(set(m["channel_hash"] for m in recent))
+    baseline_channels = len(set(m["channel_hash"] for m in baseline))
 
-    shrinkage = (baseline_contacts - recent_contacts) / baseline_contacts
-    score = min(max(int(shrinkage * 100), 0), 100)
-    confidence = min(baseline_contacts / 5, 1.0)
+    if not bl_weekly or not cu_weekly:
+        return SensorReading(score=0, finding="Insufficient baseline data", confidence=0.0, label="Social Graph", zscore=0.0)
+
+    score, z = zscore_risk(bl_weekly, cu_weekly, higher_is_worse=False)
+    confidence = min(baseline_channels / 5, 1.0)
 
     if score >= 70:
-        finding = f"Active conversations dropped from {baseline_contacts} to {recent_contacts} - social circle significantly contracted"
+        finding = f"Social circle shrank from {baseline_channels} to {recent_channels} active conversations ({z:+.1f}σ below your baseline)"
     elif score >= 40:
-        finding = f"Moderate social withdrawal - {baseline_contacts - recent_contacts} fewer active conversations than baseline"
+        finding = f"Moderate social withdrawal from your baseline ({z:+.1f}σ)"
     else:
-        finding = "Social engagement is consistent with your normal patterns"
+        finding = f"Social engagement consistent with your normal patterns ({z:+.1f}σ)"
 
-    return SensorReading(score=score, finding=finding, confidence=confidence, label="Social Graph")
+    return SensorReading(score=score, finding=finding, confidence=confidence, label="Social Graph", zscore=z)

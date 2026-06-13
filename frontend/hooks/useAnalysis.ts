@@ -8,11 +8,15 @@ export type SensorReading = {
   confidence: number;
 };
 
+export type AttentionWeight = { label: string; pct: number; zscore: number };
+
 export type AnalysisState = {
   status: "idle" | "running" | "done" | "error";
   readings: SensorReading[];
   riskScore: number | null;
   daysToThreshold: number | null;
+  attentionWeights: AttentionWeight[];
+  divergenceDaysAgo: number | null;
   error: string | null;
 };
 
@@ -30,17 +34,19 @@ export function useAnalysis() {
     readings: [],
     riskScore: null,
     daysToThreshold: null,
+    attentionWeights: [],
+    divergenceDaysAgo: null,
     error: null,
   });
   const wsRef = useRef<WebSocket | null>(null);
 
   const reset = useCallback(() => {
     wsRef.current?.close();
-    setState({ status: "idle", readings: [], riskScore: null, daysToThreshold: null, error: null });
+    setState({ status: "idle", readings: [], riskScore: null, daysToThreshold: null, attentionWeights: [], divergenceDaysAgo: null, error: null });
   }, []);
 
   const runWithMetadata = useCallback((metadata: object, sentimentText = "") => {
-    setState({ status: "running", readings: [], riskScore: null, daysToThreshold: null, error: null });
+    setState({ status: "running", readings: [], riskScore: null, daysToThreshold: null, attentionWeights: [], divergenceDaysAgo: null, error: null });
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
@@ -62,6 +68,8 @@ export function useAnalysis() {
           status: "done",
           riskScore: msg.risk_score,
           daysToThreshold: msg.days_to_threshold,
+          attentionWeights: msg.attention_weights ?? [],
+          divergenceDaysAgo: msg.divergence_days_ago ?? null,
         }));
       }
     };
@@ -72,7 +80,7 @@ export function useAnalysis() {
   }, []);
 
   const runDemo = useCallback(async (scenario: "healthy" | "crisis") => {
-    setState({ status: "running", readings: [], riskScore: null, daysToThreshold: null, error: null });
+    setState({ status: "running", readings: [], riskScore: null, daysToThreshold: null, attentionWeights: [], divergenceDaysAgo: null, error: null });
     try {
       const res = await fetch(`${REST_URL}/demo/${scenario}`, { headers: authHeaders() });
       const data = await res.json();
@@ -83,7 +91,7 @@ export function useAnalysis() {
   }, [runWithMetadata]);
 
   const runFile = useCallback(async (file: File, sentimentText = "") => {
-    setState({ status: "running", readings: [], riskScore: null, daysToThreshold: null, error: null });
+    setState({ status: "running", readings: [], riskScore: null, daysToThreshold: null, attentionWeights: [], divergenceDaysAgo: null, error: null });
     try {
       const form = new FormData();
       form.append("file", file);

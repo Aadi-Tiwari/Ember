@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from collections import Counter
+from .zscore import zscore_risk
 
 
 @dataclass
@@ -8,12 +9,13 @@ class SensorReading:
     finding: str
     confidence: float
     label: str = "Frequency"
+    zscore: float = 0.0
 
 
 def run(metadata: dict) -> SensorReading:
     """
     Measures sustained dropoff in daily messaging activity.
-    A gradual decline over 14 days is weighted higher than a single quiet day.
+    Scores against YOUR normal output volume - a quiet person who gets quieter is the signal.
     """
     recent = metadata["recent"]
     baseline = metadata["baseline"]
@@ -21,22 +23,23 @@ def run(metadata: dict) -> SensorReading:
     recent_by_day = Counter(m["timestamp"].date() for m in recent)
     baseline_by_day = Counter(m["timestamp"].date() for m in baseline)
 
-    recent_avg = sum(recent_by_day.values()) / max(len(recent_by_day), 1)
-    baseline_avg = sum(baseline_by_day.values()) / max(len(baseline_by_day), 1)
+    bl_daily = list(baseline_by_day.values())
+    cu_daily = list(recent_by_day.values())
 
-    if baseline_avg == 0:
-        score = 0
-    else:
-        dropoff = (baseline_avg - recent_avg) / baseline_avg
-        score = min(max(int(dropoff * 100), 0), 100)
+    if not bl_daily or not cu_daily:
+        return SensorReading(score=0, finding="Insufficient data", confidence=0.0, label="Frequency", zscore=0.0)
 
+    score, z = zscore_risk(bl_daily, cu_daily, higher_is_worse=False)
     confidence = min(len(baseline_by_day) / 10, 1.0)
 
-    if score >= 70:
-        finding = f"Daily messaging dropped {score}% - from ~{int(baseline_avg)} to ~{int(recent_avg)} messages per day"
-    elif score >= 40:
-        finding = f"Moderate activity decline - {score}% fewer messages than your baseline"
-    else:
-        finding = "Messaging frequency is consistent with your normal patterns"
+    bl_avg = sum(bl_daily) / len(bl_daily)
+    cu_avg = sum(cu_daily) / len(cu_daily)
 
-    return SensorReading(score=score, finding=finding, confidence=confidence, label="Frequency")
+    if score >= 70:
+        finding = f"Activity dropped sharply - {cu_avg:.0f} msgs/day vs your baseline {bl_avg:.0f} ({z:+.1f}σ)"
+    elif score >= 40:
+        finding = f"Moderate activity decline from your baseline ({z:+.1f}σ)"
+    else:
+        finding = f"Messaging frequency consistent with your baseline ({z:+.1f}σ)"
+
+    return SensorReading(score=score, finding=finding, confidence=confidence, label="Frequency", zscore=z)
