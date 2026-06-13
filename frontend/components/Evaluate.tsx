@@ -6,6 +6,7 @@ import type { SensorReading, AttentionWeight } from "../hooks/useLiveStream";
 type Props = {
   open: boolean;
   onClose: () => void;
+  onEndSession: () => void;
   score: number;
   readings: SensorReading[];
   attentionWeights: AttentionWeight[];
@@ -86,7 +87,7 @@ function ScoreRing({ score, color }: { score: number; color: string }) {
   );
 }
 
-export default function Evaluate({ open, onClose, score, readings, attentionWeights }: Props) {
+export default function Evaluate({ open, onClose, onEndSession, score, readings, attentionWeights }: Props) {
   const { color } = riskInfo(score);
   const recs      = recommendations(score, readings);
   const summary   = interpret(score, readings);
@@ -215,11 +216,18 @@ export default function Evaluate({ open, onClose, score, readings, attentionWeig
                   </div>
                 )}
 
-                {/* Close */}
-                <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm cursor-pointer"
-                  style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--muted)" }}>
-                  Close
-                </button>
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm cursor-pointer"
+                    style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--muted)" }}>
+                    Close
+                  </button>
+                  <button onClick={onEndSession}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-medium cursor-pointer"
+                    style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}>
+                    End Session
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>

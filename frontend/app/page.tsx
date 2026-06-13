@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Shield, Play, Square, Eye, Mic, Mouse, ChevronRight } from "lucide-react";
+import { Activity, Shield, Play, Eye, Mic, Mouse, ChevronRight } from "lucide-react";
 import LiveBadge from "../components/LiveBadge";
 import FaceCam from "../components/FaceCam";
 import VoicePanel from "../components/VoicePanel";
@@ -179,31 +179,23 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Evaluate button */}
-                  {hasScore && (
-                    <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      onClick={() => setShowEvaluate(true)}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium cursor-pointer"
-                      style={{ background: color + "15", border: `1px solid ${color}40`, color }}
-                      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                      View Evaluation
-                      <ChevronRight size={12} />
-                    </motion.button>
-                  )}
+                  {/* Evaluate button - always visible once session starts */}
+                  <button
+                    onClick={() => hasScore && setShowEvaluate(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium"
+                    style={{
+                      background: hasScore ? color + "15" : "var(--surface-2)",
+                      border: `1px solid ${hasScore ? color + "40" : "var(--border)"}`,
+                      color: hasScore ? color : "var(--muted)",
+                      cursor: hasScore ? "pointer" : "default",
+                      opacity: hasScore ? 1 : 0.5,
+                    }}>
+                    {hasScore ? "View Evaluation" : "Collecting data..."}
+                    {hasScore && <ChevronRight size={12} />}
+                  </button>
                 </div>
               </div>
 
-              {/* End session */}
-              <div className="flex justify-center pt-2 pb-6">
-                <button onClick={stopSession}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs cursor-pointer"
-                  style={{ color: "var(--muted)", border: "1px solid var(--border)" }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "var(--muted)")}>
-                  <Square size={11} />
-                  End session
-                </button>
-              </div>
             </motion.div>
           )}
 
@@ -214,6 +206,7 @@ export default function Home() {
       <Evaluate
         open={showEvaluate}
         onClose={() => setShowEvaluate(false)}
+        onEndSession={() => { setShowEvaluate(false); stopSession(); }}
         score={score}
         readings={live.state.readings}
         attentionWeights={live.state.attentionWeights}
