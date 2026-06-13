@@ -1,7 +1,3 @@
-from .timing_sensor import run as timing
-from .frequency_sensor import run as frequency
-from .latency_sensor import run as latency
-from .social_sensor import run as social
-from .volume_sensor import run as volume
-from .sentiment_sensor import run as sentiment
 from .vitals_sensor import run as vitals
+from .emotion_sensor import run as emotion
+from .voice_sensor import run as voice

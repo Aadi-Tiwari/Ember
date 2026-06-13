@@ -1,11 +1,6 @@
-"""
-In-memory rolling event buffer.
-Accepts events from the activity monitor and Discord bot,
-provides rolling 14/28-day windows for the existing analyzers.
-"""
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Optional
 
@@ -18,10 +13,11 @@ class Event:
 
 
 class EventStore:
-    def __init__(self, max_events: int = 100_000):
+    def __init__(self, max_events: int = 50_000):
         self._events: deque[Event] = deque(maxlen=max_events)
         self._latest_vitals: Optional[dict] = None
         self._latest_emotion: Optional[dict] = None
+        self._latest_voice: Optional[dict] = None
         self._lock = Lock()
 
     def add(self, event: Event) -> None:
@@ -31,6 +27,8 @@ class EventStore:
                 self._latest_vitals = event.data
             elif event.type == "emotion":
                 self._latest_emotion = event.data
+            elif event.type == "voice":
+                self._latest_voice = event.data
 
     def get_vitals(self) -> Optional[dict]:
         with self._lock:
@@ -40,68 +38,17 @@ class EventStore:
         with self._lock:
             return self._latest_emotion
 
-    def get_message_metadata(self) -> dict:
-        """
-        Returns message events as the metadata dict expected by the existing analyzers.
-        recent = last 14 days, baseline = 14-28 days ago.
-        """
-        now = datetime.now(timezone.utc)
-        recent_cutoff = now - timedelta(days=14)
-        baseline_cutoff = now - timedelta(days=28)
-
+    def get_voice(self) -> Optional[dict]:
         with self._lock:
-            messages = [e for e in self._events if e.type == "message"]
+            return self._latest_voice
 
-        recent, baseline = [], []
-        for e in messages:
-            ts = e.timestamp
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            entry = {**e.data, "timestamp": ts}
-            if ts >= recent_cutoff:
-                recent.append(entry)
-            elif ts >= baseline_cutoff:
-                baseline.append(entry)
-
-        return {"recent": recent, "baseline": baseline}
-
-    def message_count(self) -> int:
+    def any_data(self) -> bool:
         with self._lock:
-            return sum(1 for e in self._events if e.type == "message")
-
-    def get_messages_by_author(self) -> dict:
-        """
-        Groups message events by author_hash.
-        Returns {author_hash: {recent: [...], baseline: [...], last_seen: datetime}}
-        Used by the counselor dashboard to show per-user risk scores.
-        """
-        now = datetime.now(timezone.utc)
-        recent_cutoff = now - timedelta(days=14)
-        baseline_cutoff = now - timedelta(days=28)
-
-        with self._lock:
-            messages = [e for e in self._events if e.type == "message"]
-
-        by_author: dict = {}
-        for e in messages:
-            ts = e.timestamp
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-
-            author = e.data.get("author_hash", "unknown")
-            if author not in by_author:
-                by_author[author] = {"recent": [], "baseline": [], "last_seen": ts}
-
-            if ts > by_author[author]["last_seen"]:
-                by_author[author]["last_seen"] = ts
-
-            entry = {**e.data, "timestamp": ts}
-            if ts >= recent_cutoff:
-                by_author[author]["recent"].append(entry)
-            elif ts >= baseline_cutoff:
-                by_author[author]["baseline"].append(entry)
-
-        return by_author
+            return (
+                self._latest_vitals is not None
+                or self._latest_emotion is not None
+                or self._latest_voice is not None
+            )
 
 
 store = EventStore()
