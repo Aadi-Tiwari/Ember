@@ -47,8 +47,9 @@ def run(vitals: dict) -> SensorReading:
     flags = []
     if velocity < 120:
         flags.append(f"sluggish mouse ({velocity:.0f}px/s)")
-    if key_rate < 70:
-        flags.append(f"slow typing ({key_rate:.0f}kpm)")
+    if key_rate < 70 and velocity > 20:
+        # Only flag low typing if mouse is moving (user is active but not typing)
+        flags.append(f"low keyboard engagement ({key_rate:.0f}kpm)")
     if idle_ratio > 0.55:
         flags.append(f"long idle periods ({idle_ratio * 100:.0f}%)")
 

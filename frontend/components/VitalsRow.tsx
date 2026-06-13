@@ -47,8 +47,9 @@ export default function VitalsRow({ vitals }: Props) {
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex gap-2"
+      className="flex flex-col gap-1.5"
     >
+    <div className="flex gap-2">
       <VitalChip
         icon={Mouse}
         label="Mouse speed"
@@ -70,6 +71,10 @@ export default function VitalsRow({ vitals }: Props) {
         unit="%"
         warn={vitals.idle_ratio > 0.55}
       />
+    </div>
+    <p className="text-xs" style={{ color: "var(--muted)" }}>
+      Tracking this tab - run <code style={{ color: "#22c55e" }}>python monitor/activity_monitor.py</code> for system-wide tracking
+    </p>
     </motion.div>
   );
 }
