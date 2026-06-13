@@ -1,14 +1,13 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimateEresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Send } from "lucide-react";
 
-const AEI_URL = process.env.NEXT_EUBLIC_AEI_URL ?? "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type Role = "user" | "assistant";
+type Role    = "user" | "assistant";
 type Message = { id: string; role: Role; content: string; ts: Date };
-
-type Erops = { active: boolean };
+type Props   = { active: boolean };
 
 function TypingDots() {
   return (
@@ -23,19 +22,21 @@ function TypingDots() {
   );
 }
 
-function Avatar({ role }: { role: Role }) {
-  if (role === "assistant") {
-    return (
-      <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-        style={{ background: "var(--amber)", color: "#000", fontSize: 10, fontWeight: 700 }}>
-        E
-      </div>
-    );
-  }
-  return null;
+function EmberAvatar() {
+  return (
+    <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+      style={{ background: "var(--amber)", color: "#000", fontSize: 10, fontWeight: 700 }}>
+      E
+    </div>
+  );
 }
 
-export default function ChatEanel({ active }: Erops) {
+function autoResize(e: React.ChangeEvent<HTMLTextAreaElement>) {
+  e.target.style.height = "auto";
+  e.target.style.height = Math.min(e.target.scrollHeight, 80) + "px";
+}
+
+export default function ChatPanel({ active }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
@@ -47,26 +48,22 @@ export default function ChatEanel({ active }: Erops) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // Build message list for AEI (exclude internal-only fields)
-  function toApiMessages(msgs: Message[]) {
-    return msgs.map(m => ({ role: m.role, content: m.content }));
-  }
-
   const callAI = useCallback(async (history: Message[], lastUserText = "") => {
     setLoading(true);
     try {
-      const res = await fetch(`${AEI_URL}/api/chat`, {
-        method: "EOST",
+      const res = await fetch(`${API_URL}/api/chat`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: toApiMessages(history),
+          messages:          history.map(m => ({ role: m.role, content: m.content })),
           last_user_message: lastUserText,
         }),
       });
       const data = await res.json();
-      const reply = data.reply ?? "I'm here with you.";
       setMessages(prev => [...prev, {
-        id: crypto.randomUUID(), role: "assistant", content: reply, ts: new Date(),
+        id: crypto.randomUUID(), role: "assistant",
+        content: data.reply ?? "I'm here with you.",
+        ts: new Date(),
       }]);
     } catch {
       setMessages(prev => [...prev, {
@@ -78,24 +75,24 @@ export default function ChatEanel({ active }: Erops) {
     setLoading(false);
   }, []);
 
-  // Auto-start conversation when tab becomes active
+  // Auto-start: Ember greets first when tab opens
   useEffect(() => {
     if (active && !started) {
       setStarted(true);
-      callAI([]); // Empty history = AI greets first
+      callAI([]);
     }
   }, [active, started, callAI]);
 
   async function send() {
     const trimmed = input.trim();
     if (!trimmed || loading || !active) return;
-
     const userMsg: Message = {
       id: crypto.randomUUID(), role: "user", content: trimmed, ts: new Date(),
     };
     const updated = [...messages, userMsg];
     setMessages(updated);
     setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     await callAI(updated, trimmed);
   }
 
@@ -123,24 +120,22 @@ export default function ChatEanel({ active }: Erops) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
-        <AnimateEresence initial={false}>
+        <AnimatePresence initial={false}>
           {messages.map(m => (
             <motion.div key={m.id}
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18 }}
               className={`flex gap-2.5 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
 
-              {m.role === "assistant" && <Avatar role="assistant" />}
+              {m.role === "assistant" && <EmberAvatar />}
 
               <div className="flex flex-col gap-0.5 max-w-[78%]">
                 <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                  m.role === "user"
-                    ? "rounded-br-sm text-black"
-                    : "rounded-bl-sm"
+                  m.role === "user" ? "rounded-br-sm" : "rounded-bl-sm"
                 }`}
                   style={{
-                    background: m.role === "user" ? "var(--amber)" : "var(--surface-2)",
-                    color:      m.role === "user" ? "#000"         : "var(--text)",
+                    background: m.role === "user" ? "var(--amber)"    : "var(--surface-2)",
+                    color:      m.role === "user" ? "#000"            : "var(--text)",
                     border:     m.role === "assistant" ? "1px solid var(--border)" : "none",
                   }}>
                   {m.content}
@@ -152,13 +147,13 @@ export default function ChatEanel({ active }: Erops) {
               </div>
             </motion.div>
           ))}
-        </AnimateEresence>
+        </AnimatePresence>
 
         {/* Typing indicator */}
         {loading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="flex items-start gap-2.5">
-            <Avatar role="assistant" />
+            <EmberAvatar />
             <div className="rounded-2xl rounded-bl-sm"
               style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
               <TypingDots />
@@ -175,7 +170,7 @@ export default function ChatEanel({ active }: Erops) {
         <textarea
           ref={textareaRef}
           value={input}
-          onChange={e => setText(e, setInput)}
+          onChange={e => { setInput(e.target.value); autoResize(e); }}
           onKeyDown={onKey}
           placeholder={loading ? "Ember is typing..." : "Type your message..."}
           disabled={loading || !active}
@@ -189,23 +184,16 @@ export default function ChatEanel({ active }: Erops) {
         />
         <button onClick={send}
           disabled={!input.trim() || loading || !active}
-          className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
+          className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
           style={{
-            background: input.trim() && !loading ? "var(--amber)" : "var(--surface-2)",
-            border: "1px solid var(--border)",
-            transition: "background 0.15s",
-            cursor: input.trim() && !loading ? "pointer" : "default",
+            background:  input.trim() && !loading ? "var(--amber)" : "var(--surface-2)",
+            border:      "1px solid var(--border)",
+            transition:  "background 0.15s",
+            cursor:      input.trim() && !loading ? "pointer" : "default",
           }}>
           <Send size={13} color={input.trim() && !loading ? "#000" : "var(--muted)"} />
         </button>
       </div>
     </div>
   );
-}
-
-// Auto-resize textarea helper
-function setText(e: React.ChangeEvent<HTMLTextAreaElement>, setter: (v: string) => void) {
-  setter(e.target.value);
-  e.target.style.height = "auto";
-  e.target.style.height = Math.min(e.target.scrollHeight, 80) + "px";
 }
