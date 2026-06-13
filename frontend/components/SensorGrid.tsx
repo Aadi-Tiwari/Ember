@@ -12,7 +12,7 @@ export type SensorReading = {
 
 type Props = {
   readings: SensorReading[];
-  isRunning: boolean;
+  isRunning?: boolean;
 };
 
 const SENSOR_LABELS = ["Activity", "Emotion", "Voice"];
@@ -40,16 +40,14 @@ function SkeletonCard({ index }: { index: number }) {
 export default function SensorGrid({ readings, isRunning }: Props) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {isRunning
-        ? SENSOR_LABELS.map((label, i) => {
-            const reading = readings.find((r) => r.label === label);
-            return reading ? (
-              <SensorCard key={label} {...reading} index={i} />
-            ) : (
-              <SkeletonCard key={label} index={i} />
-            );
-          })
-        : readings.map((r, i) => <SensorCard key={r.label} {...r} index={i} />)}
+      {SENSOR_LABELS.map((label, i) => {
+        const reading = readings.find((r) => r.label === label);
+        return reading ? (
+          <SensorCard key={label} {...reading} index={i} />
+        ) : (
+          <SkeletonCard key={label} index={i} />
+        );
+      })}
     </div>
   );
 }

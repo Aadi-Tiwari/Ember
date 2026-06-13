@@ -95,7 +95,7 @@ export default function FaceCam({ onEmotion }: Props) {
         },
         outputFaceBlendshapes: true,
         outputFacialTransformationMatrixes: true,
-        runningMode: "LIVE_STREAM" as any,
+        runningMode: "VIDEO" as any,
         numFaces: 1,
         minFaceDetectionConfidence: 0.4,
         minFacePresenceConfidence: 0.4,
@@ -173,6 +173,10 @@ export default function FaceCam({ onEmotion }: Props) {
     // ── DRAW FACE MESH ──
     // Canvas is NOT CSS-mirrored but video IS → flip X coords
     const W = c.width, H = c.height;
+    if (!W || !H) {
+      rafRef.current = requestAnimationFrame(detect);
+      return;
+    }
 
     // Helper: normalized landmark → canvas pixel (with x-mirror)
     const px = (lm: { x: number; y: number; z?: number }) => ({

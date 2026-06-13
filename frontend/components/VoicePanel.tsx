@@ -16,6 +16,7 @@ function MetricRow({ label, value, color }: { label: string; value: number; colo
         <motion.div
           className="h-full rounded-full"
           style={{ background: color }}
+          initial={{ width: "0%" }}
           animate={{ width: `${Math.round(value * 100)}%` }}
           transition={{ duration: 0.4 }}
         />
