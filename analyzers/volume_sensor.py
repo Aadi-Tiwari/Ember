@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from collections import defaultdict
+from .zscore import zscore_risk
 
 
 @dataclass
@@ -7,37 +9,46 @@ class SensorReading:
     finding: str
     confidence: float
     label: str = "Volume"
+    zscore: float = 0.0
+
+
+def _daily_avg_chars(msgs: list) -> list[float]:
+    """Average message length per day."""
+    by_day: dict = defaultdict(list)
+    for m in msgs:
+        by_day[m["timestamp"].date()].append(m["char_count"])
+    return [sum(v) / len(v) for v in by_day.values() if v]
 
 
 def run(metadata: dict) -> SensorReading:
     """
-    Measures compression in average message length over time.
-    Shorter messages signal declining cognitive energy and emotional flatness.
+    Measures compression in average message length vs YOUR baseline.
+    Naturally terse writers won't flag - only YOUR shift toward shorter messages matters.
     """
     recent = metadata["recent"]
     baseline = metadata["baseline"]
 
     if not recent or not baseline:
-        return SensorReading(score=0, finding="Insufficient data for volume analysis", confidence=0.0, label="Volume")
+        return SensorReading(score=0, finding="Insufficient data", confidence=0.0, label="Volume", zscore=0.0)
 
-    recent_avg = sum(m["char_count"] for m in recent) / len(recent)
-    baseline_avg = sum(m["char_count"] for m in baseline) / len(baseline)
+    bl_daily = _daily_avg_chars(baseline)
+    cu_daily = _daily_avg_chars(recent)
 
-    if baseline_avg == 0:
-        score = 0
-    else:
-        compression = (baseline_avg - recent_avg) / baseline_avg
-        recent_short_ratio = sum(1 for m in recent if m["char_count"] <= 5) / len(recent)
-        score = min(max(int((compression * 70) + (recent_short_ratio * 30)), 0), 100)
+    if not bl_daily or not cu_daily:
+        return SensorReading(score=0, finding="Insufficient data", confidence=0.0, label="Volume", zscore=0.0)
 
+    score, z = zscore_risk(bl_daily, cu_daily, higher_is_worse=False)
     confidence = min(len(recent) / 30, 1.0)
-    recent_short_pct = int(sum(1 for m in recent if m["char_count"] <= 5) / max(len(recent), 1) * 100)
+
+    bl_avg = sum(bl_daily) / len(bl_daily)
+    cu_avg = sum(cu_daily) / len(cu_daily)
+    short_pct = int(sum(1 for m in recent if m["char_count"] <= 5) / max(len(recent), 1) * 100)
 
     if score >= 70:
-        finding = f"Message length dropped from ~{int(baseline_avg)} to ~{int(recent_avg)} characters. {recent_short_pct}% of messages are now under 5 characters"
+        finding = f"Message length dropped to {cu_avg:.0f} chars vs your baseline {bl_avg:.0f} chars ({z:+.1f}σ)"
     elif score >= 40:
-        finding = f"Messages getting shorter - average {int(recent_avg)} chars vs {int(baseline_avg)} chars baseline"
+        finding = f"Messages getting shorter from your baseline ({z:+.1f}σ)"
     else:
-        finding = "Message length is consistent with your normal communication style"
+        finding = f"Message length consistent with your normal style ({z:+.1f}σ)"
 
-    return SensorReading(score=score, finding=finding, confidence=confidence, label="Volume")
+    return SensorReading(score=score, finding=finding, confidence=confidence, label="Volume", zscore=z)
