@@ -82,9 +82,10 @@ export default function FaceCam({ onEmotion }: Props) {
     setPhase("loading-models");
     try {
       if (faceapi.tf?.ready) await faceapi.tf.ready();
-      // SSD MobileNet: much more accurate than TinyFaceDetector
+      // Load both detectors - SSD for accuracy, TinyFace as fallback
       await Promise.all([
         faceapi.nets.ssdMobilenetv1.loadFromUri("/models"),
+        faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
         faceapi.nets.faceExpressionNet.loadFromUri("/models"),
       ]);
     } catch (e: any) {
@@ -140,9 +141,17 @@ export default function FaceCam({ onEmotion }: Props) {
       if (!v || v.readyState < 2 || !c) return;
 
       try {
-        const result = await faceapi
-          .detectSingleFace(v, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
+        // Try SSD MobileNet first (more accurate), low threshold so angled faces work
+        let result = await faceapi
+          .detectSingleFace(v, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.15 }))
           .withFaceExpressions();
+
+        // Fallback to TinyFaceDetector if SSD missed it
+        if (!result) {
+          result = await faceapi
+            .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.2 }))
+            .withFaceExpressions();
+        }
 
         const ctx = c.getContext("2d");
         if (ctx) ctx.clearRect(0, 0, c.width, c.height);
