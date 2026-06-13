@@ -22,25 +22,33 @@ def run(emotion: dict) -> SensorReading:
     fearful   = float(emotion.get("fearful", 0))
     disgusted = float(emotion.get("disgusted", 0))
     neutral   = float(emotion.get("neutral", 0))
-    eye_open  = float(emotion.get("eye_openness", 0.3))  # EAR: 0.3 = normal, <0.2 = drowsy
+    eye_open  = float(emotion.get("eye_openness", 1.0))   # 1=fully open, 0=closed
+    perclos   = float(emotion.get("perclos", 0.0))        # % of time eyes closed (drowsiness)
+    head_pitch = float(emotion.get("head_pitch", 0.0))    # negative = head drooping forward
 
     # Emotion risk
     emotion_raw = (sad * 3.0 + fearful * 2.5 + disgusted * 1.5
                    + angry * 1.5 + neutral * 0.5 - happy * 2.0)
     emotion_score = min(100, max(0, int(emotion_raw * 50)))
 
-    # Eye fatigue risk (EAR < 0.18 = very drowsy)
-    if eye_open < 0.18:
+    # Eye fatigue from MediaPipe blink blendshape (1=open, 0=closed)
+    if eye_open < 0.35:
         eye_score = 80
         eye_label = "very drowsy eyes"
-    elif eye_open < 0.22:
-        eye_score = 50
+    elif eye_open < 0.6:
+        eye_score = 45
         eye_label = "tired eyes"
     else:
         eye_score = 0
         eye_label = None
 
-    score = min(100, int(emotion_score * 0.7 + eye_score * 0.3))
+    # PERCLOS fatigue (>0.2 = drowsy per literature)
+    perclos_score = min(100, int(perclos * 400))
+
+    # Head drooping (negative pitch = head down = fatigue)
+    head_score = min(60, int(max(0, -head_pitch - 10) * 3))
+
+    score = min(100, int(emotion_score * 0.5 + max(eye_score, perclos_score) * 0.35 + head_score * 0.15))
 
     dom = max(
         [("happy", happy), ("sad", sad), ("angry", angry),
