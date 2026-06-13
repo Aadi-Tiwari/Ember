@@ -1,8 +1,7 @@
 "use client";
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Shield, ChevronRight, RotateCcw, Zap, Radio, LogOut, User } from "lucide-react";
+import { Activity, Shield, ChevronRight, RotateCcw, Zap, Radio } from "lucide-react";
 import BurnoutGauge from "../components/BurnoutGauge";
 import SensorGrid from "../components/SensorGrid";
 import UploadZone from "../components/UploadZone";
@@ -15,13 +14,11 @@ import { useAnalysis } from "../hooks/useAnalysis";
 import { useLiveStream } from "../hooks/useLiveStream";
 import { useActivityTracker } from "../hooks/useActivityTracker";
 import { saveRun } from "../lib/history";
-import { getToken, getUser, clearToken, apiFetch } from "../lib/api";
 
 type Tab = "scan" | "counselor";
 type Mode = "idle" | "live" | "batch";
 
 export default function Home() {
-  const router = useRouter();
   const analysis = useAnalysis();
   const live = useLiveStream();
 
@@ -30,42 +27,22 @@ export default function Home() {
   const [sentimentText, setSentimentText] = useState("");
   const [showSentiment, setShowSentiment] = useState(false);
   const savedRef = useRef(false);
-  const user = typeof window !== "undefined" ? getUser() : null;
-
-  // Redirect to login if no token
-  useEffect(() => {
-    if (!getToken()) {
-      router.push("/login");
-    }
-  }, [router]);
 
   // Browser-based activity tracking - starts immediately when live mode is on
   const localVitals = useActivityTracker(mode === "live");
 
-  // Save batch analysis to DB (and localStorage) when done
+  // Save to localStorage when analysis completes
   useEffect(() => {
     if (analysis.state.status === "done" && analysis.state.riskScore !== null && !savedRef.current) {
       savedRef.current = true;
-      const payload = {
-        timestamp: new Date().toISOString(),
-        risk_score: analysis.state.riskScore,
-        days_to_threshold: analysis.state.daysToThreshold,
-        readings: analysis.state.readings,
-        source: "upload",
-      };
-      // Save to DB if logged in
-      if (getToken()) {
-        apiFetch("/scans", { method: "POST", body: JSON.stringify(payload) }).catch(() => {});
-      }
-      // Also keep localStorage history
       saveRun({
-        timestamp: payload.timestamp,
+        timestamp: new Date().toISOString(),
         scenario: "scan",
         riskScore: analysis.state.riskScore,
         daysToThreshold: analysis.state.daysToThreshold,
       });
     }
-  }, [analysis.state.status, analysis.state.riskScore, analysis.state.daysToThreshold, analysis.state.readings]);
+  }, [analysis.state.status, analysis.state.riskScore, analysis.state.daysToThreshold]);
 
   function goLive() {
     setMode("live");
@@ -153,26 +130,9 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
-            <Shield size={12} />
-            <span className="text-xs">No messages read</span>
-          </div>
-          {user && (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-                <User size={11} color="var(--muted)" />
-                <span className="text-xs" style={{ color: "var(--muted)" }}>{user.display_name}</span>
-              </div>
-              <button
-                onClick={() => { clearToken(); router.push("/login"); }}
-                className="p-1.5 rounded-lg transition-colors hover:bg-white/5"
-                title="Sign out"
-              >
-                <LogOut size={13} color="var(--muted)" />
-              </button>
-            </div>
-          )}
+        <div className="flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
+          <Shield size={12} />
+          <span className="text-xs">No messages read</span>
         </div>
       </header>
 
