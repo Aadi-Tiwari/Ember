@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Shield, RotateCcw, Play, Square } from "lucide-react";
+import { Activity, Shield, Play, Square } from "lucide-react";
 import BurnoutGauge from "../components/BurnoutGauge";
 import SensorGrid from "../components/SensorGrid";
 import ResourceCard from "../components/ResourceCard";
@@ -228,7 +228,7 @@ function CounselorView() {
     fetch(`${API}/counselor-data`).then(r => r.json()).then(d => { setRows(d.students ?? []); setLoading(false); }).catch(() => setLoading(false));
   };
 
-  useState(() => { load(); const t = setInterval(load, 10_000); return () => clearInterval(t); });
+  useEffect(() => { load(); const t = setInterval(load, 10_000); return () => clearInterval(t); }, []);
 
   const avg = rows.length ? Math.round(rows.reduce((a, r) => a + r.score, 0) / rows.length) : 0;
   const highRisk = rows.filter(r => r.score >= 70).length;
