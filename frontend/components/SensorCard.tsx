@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Activity, Clock, MessageSquare, Timer, Users, Volume2, Heart } from "lucide-react";
+import { Activity, Heart, Mic, Mouse } from "lucide-react";
 
 type Props = {
   label: string;
@@ -8,15 +8,13 @@ type Props = {
   finding: string;
   confidence: number;
   index: number;
+  zscore?: number;
 };
 
 const ICONS: Record<string, React.ElementType> = {
-  Timing: Clock,
-  Frequency: Activity,
-  Latency: Timer,
-  "Social Graph": Users,
-  Volume: Volume2,
-  Sentiment: Heart,
+  Activity: Mouse,
+  Emotion: Heart,
+  Voice: Mic,
 };
 
 function getColor(score: number) {
@@ -26,8 +24,8 @@ function getColor(score: number) {
   return { bar: "#ef4444", glow: "#ef444433" };
 }
 
-export default function SensorCard({ label, score, finding, confidence, index }: Props) {
-  const Icon = ICONS[label] ?? MessageSquare;
+export default function SensorCard({ label, score, finding, confidence, index, zscore }: Props) {
+  const Icon = ICONS[label] ?? Activity;
   const { bar, glow } = getColor(score);
 
   return (
@@ -48,12 +46,18 @@ export default function SensorCard({ label, score, finding, confidence, index }:
           </div>
           <span className="text-sm font-medium">{label}</span>
         </div>
-        <span className="text-xl font-bold tabular-nums" style={{ color: bar }}>
-          {Math.round(score)}
-        </span>
+        <div className="flex items-center gap-2">
+          {zscore !== undefined && zscore !== 0 && (
+            <span className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+              {zscore > 0 ? "+" : ""}{zscore.toFixed(1)}σ
+            </span>
+          )}
+          <span className="text-xl font-bold tabular-nums" style={{ color: bar }}>
+            {Math.round(score)}
+          </span>
+        </div>
       </div>
 
-      {/* Score bar */}
       <div className="h-1.5 rounded-full" style={{ background: "var(--border)" }}>
         <motion.div
           className="h-full rounded-full"
