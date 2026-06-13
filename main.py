@@ -157,6 +157,11 @@ async def _push_live(ws: WebSocket):
     from analyzers.vitals_sensor import run as vitals_run
     readings = [vitals_run(vitals)]
 
+    emotion = store.get_emotion()
+    if emotion:
+        from analyzers.emotion_sensor import run as emotion_run
+        readings.append(emotion_run(emotion))
+
     msg_count = store.message_count()
     if msg_count >= 10:
         from analyzers import timing, frequency, latency, social, volume

@@ -10,6 +10,7 @@ import HistoryPanel from "../components/HistoryPanel";
 import ResourceCard from "../components/ResourceCard";
 import LiveBadge from "../components/LiveBadge";
 import VitalsRow from "../components/VitalsRow";
+import FaceCam, { type EmotionScores } from "../components/FaceCam";
 import { useAnalysis } from "../hooks/useAnalysis";
 import { useLiveStream } from "../hooks/useLiveStream";
 import { useActivityTracker } from "../hooks/useActivityTracker";
@@ -267,8 +268,8 @@ export default function Home() {
                     </motion.div>
                   )}
 
-                  {/* Gauge + sources */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Gauge + camera + sources */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div
                       className="rounded-2xl p-6 flex flex-col items-center justify-center gap-4"
                       style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
@@ -331,6 +332,13 @@ export default function Home() {
                         </p>
                       )}
                     </div>
+
+                    {/* Face cam */}
+                    <FaceCam
+                      onEmotion={(emotions, score) => {
+                        // Emotion score feeds directly into live display
+                      }}
+                    />
                   </div>
 
                   {/* Sensor cards from WebSocket analysis */}
