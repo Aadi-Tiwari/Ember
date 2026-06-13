@@ -4,3 +4,4 @@ from .latency_sensor import run as latency
 from .social_sensor import run as social
 from .volume_sensor import run as volume
 from .sentiment_sensor import run as sentiment
+from .vitals_sensor import run as vitals
