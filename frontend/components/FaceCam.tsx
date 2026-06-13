@@ -33,17 +33,16 @@ export function emotionRiskScore(e: EmotionScores): number {
   return Math.min(100, Math.max(0, Math.round(raw * 50)));
 }
 
-/** Amplify subtle non-neutral emotions so they actually show up */
+/** Gently amplify non-neutral emotions to reduce neutral bias in model */
 function amplify(raw: EmotionScores): EmotionScores {
-  const AMP = 4.0;
+  const AMP = 1.8;
   const amp: any = { ...raw };
-  amp.happy    *= AMP;
-  amp.sad      *= AMP;
-  amp.angry    *= AMP;
-  amp.fearful  *= AMP;
+  amp.happy     *= AMP;
+  amp.sad       *= AMP;
+  amp.angry     *= AMP;
+  amp.fearful   *= AMP;
   amp.disgusted *= AMP;
   amp.surprised *= AMP;
-  // neutral stays as-is - it competes against the amplified others
   const total = Object.values(amp).reduce((s: number, v) => s + (v as number), 0);
   if (total === 0) return raw;
   const result: any = {};
@@ -173,7 +172,7 @@ export default function FaceCam({ onEmotion }: Props) {
 
           // Amplify + smooth
           const amplified = amplify(result.expressions as EmotionScores);
-          const smoothed = smooth(smoothedRef.current, amplified);
+          const smoothed = smooth(smoothedRef.current, amplified, 0.25);
           smoothedRef.current = smoothed;
 
           setEmotions(smoothed);
@@ -294,21 +293,24 @@ export default function FaceCam({ onEmotion }: Props) {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-3 flex flex-col gap-1.5">
               {EMOTION_ORDER.map(name => {
                 const val = (emotions as any)[name] as number ?? 0;
+                const pct = Math.min(100, Math.max(0, val * 100));
+                const isDominant = name === dominant?.[0];
                 return (
                   <div key={name} className="flex items-center gap-2">
-                    <span className="text-xs w-16 capitalize" style={{ color: name === dominant?.[0] ? "var(--text)" : "var(--muted)", fontWeight: name === dominant?.[0] ? 600 : 400 }}>
+                    <span className="text-xs w-16 capitalize" style={{ color: isDominant ? "var(--text)" : "var(--muted)", fontWeight: isDominant ? 600 : 400 }}>
                       {name}
                     </span>
-                    <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--border)" }}>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
                       <motion.div
                         className="h-full rounded-full"
                         style={{ background: COLORS[name] }}
-                        animate={{ width: `${(val * 100).toFixed(1)}%` }}
-                        transition={{ duration: 0.3 }}
+                        initial={{ width: "0%" }}
+                        animate={{ width: `${pct.toFixed(1)}%` }}
+                        transition={{ duration: 0.4, ease: "easeOut" }}
                       />
                     </div>
-                    <span className="text-xs tabular-nums w-7 text-right" style={{ color: name === dominant?.[0] ? dominantColor : "var(--muted)" }}>
-                      {(val * 100).toFixed(0)}%
+                    <span className="text-xs tabular-nums w-7 text-right" style={{ color: isDominant ? dominantColor : "var(--muted)" }}>
+                      {pct.toFixed(0)}%
                     </span>
                   </div>
                 );
