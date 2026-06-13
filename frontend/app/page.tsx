@@ -159,18 +159,26 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Sensor cards */}
-                  {live.state.readings.length > 0 && (
-                    <div className="flex flex-col gap-3">
-                      <h2 className="text-sm font-semibold">Live Sensors</h2>
-                      <SensorGrid readings={live.state.readings} isRunning={false} />
+                  {/* Sensor cards - always visible, skeletons while waiting */}
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-semibold">Sensor Readings</h2>
+                      {!hasScore && (
+                        <span className="text-xs" style={{ color: "var(--muted)" }}>
+                          Collecting data...
+                        </span>
+                      )}
                     </div>
-                  )}
+                    <SensorGrid
+                      readings={live.state.readings}
+                      isRunning={!hasScore}
+                    />
+                  </div>
 
-                  {/* Attention weights */}
-                  {live.state.readings.length > 0 && (
+                  {/* Attention weights - show once we have data */}
+                  {live.state.attentionWeights.length > 0 && (
                     <AttentionWeights
-                      weights={(live.state as any).attentionWeights ?? []}
+                      weights={live.state.attentionWeights}
                       divergenceDaysAgo={null}
                     />
                   )}
