@@ -73,7 +73,7 @@ export default function VitalsRow({ vitals }: Props) {
       />
     </div>
     <p className="text-xs" style={{ color: "var(--muted)" }}>
-      Tracking this tab - run <code style={{ color: "#22c55e" }}>python monitor/activity_monitor.py</code> for system-wide tracking
+      Activity tracked in this tab
     </p>
     </motion.div>
   );

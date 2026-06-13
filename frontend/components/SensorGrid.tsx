@@ -1,14 +1,21 @@
 "use client";
 import { motion } from "framer-motion";
 import SensorCard from "./SensorCard";
-import type { SensorReading } from "../hooks/useAnalysis";
+
+export type SensorReading = {
+  label: string;
+  score: number;
+  finding: string;
+  confidence: number;
+  zscore?: number;
+};
 
 type Props = {
   readings: SensorReading[];
   isRunning: boolean;
 };
 
-const SENSOR_LABELS = ["Timing", "Frequency", "Latency", "Social Graph", "Volume", "Sentiment"];
+const SENSOR_LABELS = ["Activity", "Emotion", "Voice"];
 
 function SkeletonCard({ index }: { index: number }) {
   return (
@@ -31,8 +38,6 @@ function SkeletonCard({ index }: { index: number }) {
 }
 
 export default function SensorGrid({ readings, isRunning }: Props) {
-  const filled = new Set(readings.map((r) => r.label));
-
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {isRunning

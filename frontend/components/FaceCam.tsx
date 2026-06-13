@@ -52,6 +52,8 @@ export default function FaceCam({ onEmotion }: Props) {
     // Load models from /models directory
     setPhase("loading-models");
     try {
+      // Wait for TensorFlow.js backend (WASM/WebGL) to initialize
+      if (faceapi.tf?.ready) await faceapi.tf.ready();
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
         faceapi.nets.faceExpressionNet.loadFromUri("/models"),
