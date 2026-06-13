@@ -77,7 +77,7 @@ async def websocket_analyze(ws: WebSocket):
 @app.post("/scans")
 async def save_scan(body: dict, user=Depends(get_current_user)):
     """Saves a completed scan result for the authenticated user."""
-    async with await get_db() as db:
+    async with get_db() as db:
         await db.execute(
             "INSERT INTO scans (user_id, timestamp, risk_score, days_to_threshold, readings, source) "
             "VALUES (?, ?, ?, ?, ?, ?)",
@@ -97,7 +97,7 @@ async def save_scan(body: dict, user=Depends(get_current_user)):
 @app.get("/scans")
 async def get_scans(user=Depends(get_current_user)):
     """Returns the authenticated user's full scan history."""
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             "SELECT id, timestamp, risk_score, days_to_threshold, readings, source "
             "FROM scans WHERE user_id = ? ORDER BY timestamp DESC LIMIT 30",
@@ -203,7 +203,7 @@ async def counselor_data(user=Depends(optional_user)):
     now = datetime.now(timezone.utc)
     results = []
 
-    async with await get_db() as db:
+    async with get_db() as db:
         # Latest scan per user
         async with db.execute("""
             SELECT u.id, s.risk_score, s.days_to_threshold, s.timestamp
