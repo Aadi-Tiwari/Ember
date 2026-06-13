@@ -1,13 +1,16 @@
+from contextlib import asynccontextmanager
+
 import aiosqlite
 from pathlib import Path
 
 DB_PATH = Path("pulsecheck.db")
 
 
-async def get_db() -> aiosqlite.Connection:
-    db = await aiosqlite.connect(DB_PATH)
-    db.row_factory = aiosqlite.Row
-    return db
+@asynccontextmanager
+async def get_db():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        yield db
 
 
 async def init_db() -> None:

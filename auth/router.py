@@ -64,7 +64,7 @@ async def optional_user(
 
 @router.post("/register")
 async def register(body: RegisterBody):
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute("SELECT id FROM users WHERE email = ?", (body.email,)) as cur:
             if await cur.fetchone():
                 raise HTTPException(400, "Email already registered")
@@ -88,7 +88,7 @@ async def register(body: RegisterBody):
 
 @router.post("/login")
 async def login(body: LoginBody):
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             "SELECT id, email, display_name, password_hash, role FROM users WHERE email = ?",
             (body.email,),
@@ -112,7 +112,7 @@ async def login(body: LoginBody):
 
 @router.get("/me")
 async def me(user=Depends(get_current_user)):
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             "SELECT id, email, display_name, role, created_at FROM users WHERE id = ?",
             (user["id"],),
