@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, CameraOff, Loader, Eye, Activity } from "lucide-react";
+import { Camera, CameraOff, Loader, Eye, Activity, Layers } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const SEND_INTERVAL = 4000;
@@ -67,18 +67,28 @@ export default function FaceCam({ onEmotion }: Props) {
   const smoothRef     = useRef<EmotionScores | null>(null);
   const blinkBuf      = useRef<number[]>([]);
   const lastSend      = useRef(0);
-  const lastVideoTime = useRef(-1);
-  const onEmotionRef  = useRef(onEmotion);
+  const lastVideoTime  = useRef(-1);
+  const onEmotionRef   = useRef(onEmotion);
+  const showOverlayRef = useRef(true);
 
   useEffect(() => { onEmotionRef.current = onEmotion; }, [onEmotion]);
+  useEffect(() => {
+    showOverlayRef.current = showOverlay;
+    // Clear canvas immediately when overlay is hidden
+    if (!showOverlay) {
+      const ctx = canvasRef.current?.getContext("2d");
+      if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    }
+  }, [showOverlay]);
 
-  const [phase, setPhase]       = useState<"idle" | "loading" | "active">("idle");
-  const [error, setError]       = useState("");
-  const [emotions, setEmotions] = useState<EmotionScores | null>(null);
-  const [pose, setPose]         = useState<{ pitch: number; yaw: number; roll: number } | null>(null);
-  const [eyeOpen, setEyeOpen]   = useState(1);
-  const [perclos, setPerclos]   = useState(0);
+  const [phase, setPhase]         = useState<"idle" | "loading" | "active">("idle");
+  const [error, setError]         = useState("");
+  const [emotions, setEmotions]   = useState<EmotionScores | null>(null);
+  const [pose, setPose]           = useState<{ pitch: number; yaw: number; roll: number } | null>(null);
+  const [eyeOpen, setEyeOpen]     = useState(1);
+  const [perclos, setPerclos]     = useState(0);
   const [faceFound, setFaceFound] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
 
   async function start() {
     setError("");
@@ -194,34 +204,36 @@ export default function FaceCam({ onEmotion }: Props) {
     // Mirror x coords: video is CSS-flipped, canvas is not
     const px = (lm: { x: number; y: number }) => ({ x: (1 - lm.x) * W, y: lm.y * H });
 
-    // Tessellation (full mesh)
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    ctx.lineWidth   = 0.5;
-    FaceLandmarker.FACE_LANDMARKS_TESSELATION.forEach(({ start, end }: { start: number; end: number }) => {
-      const a = px(landmarks[start]);
-      const b = px(landmarks[end]);
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-    });
-
     const emo   = blendshapesToEmotions(blendshapes);
     const dom   = Object.entries(emo).sort(([, a], [, b]) => (b as number) - (a as number))[0];
     const color = EMOTION_COLORS[dom[0]] ?? "#f59e0b";
 
-    const drawLine = (indices: { start: number; end: number }[], col: string, lw = 1.5) => {
-      ctx.strokeStyle = col;
-      ctx.lineWidth   = lw;
-      indices.forEach(({ start, end }) => {
+    // Only draw mesh when overlay is enabled
+    if (showOverlayRef.current) {
+      ctx.strokeStyle = "rgba(255,255,255,0.12)";
+      ctx.lineWidth   = 0.5;
+      FaceLandmarker.FACE_LANDMARKS_TESSELATION.forEach(({ start, end }: { start: number; end: number }) => {
         const a = px(landmarks[start]);
         const b = px(landmarks[end]);
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       });
-    };
-    drawLine(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,    "#4ade80",              1.5);
-    drawLine(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,     "#4ade80",              1.5);
-    drawLine(FaceLandmarker.FACE_LANDMARKS_LIPS,          color,                  1.5);
-    drawLine(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,     "rgba(255,255,255,0.4)", 1);
-    drawLine(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, "#fbbf24",              1.5);
-    drawLine(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,  "#fbbf24",              1.5);
+
+      const drawLine = (indices: { start: number; end: number }[], col: string, lw = 1.5) => {
+        ctx.strokeStyle = col;
+        ctx.lineWidth   = lw;
+        indices.forEach(({ start, end }) => {
+          const a = px(landmarks[start]);
+          const b = px(landmarks[end]);
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        });
+      };
+      drawLine(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,    "#4ade80",               1.5);
+      drawLine(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,     "#4ade80",               1.5);
+      drawLine(FaceLandmarker.FACE_LANDMARKS_LIPS,          color,                   1.5);
+      drawLine(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,     "rgba(255,255,255,0.3)", 1);
+      drawLine(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, "#fbbf24",               1.5);
+      drawLine(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,  "#fbbf24",               1.5);
+    }
 
     // Temporal smoothing
     const smoothed = smoothRef.current
@@ -374,7 +386,15 @@ export default function FaceCam({ onEmotion }: Props) {
               </div>
             )}
 
-            <button onClick={stop} className="absolute top-2 right-2 p-1.5 rounded-lg"
+            {/* Overlay toggle */}
+            <button onClick={() => setShowOverlay(v => !v)}
+              className="absolute top-2 right-10 p-1.5 rounded-lg cursor-pointer"
+              style={{ background: "rgba(0,0,0,0.65)", opacity: showOverlay ? 1 : 0.5 }}
+              title={showOverlay ? "Hide face mesh" : "Show face mesh"}>
+              <Layers size={13} color="#fff" />
+            </button>
+
+            <button onClick={stop} className="absolute top-2 right-2 p-1.5 rounded-lg cursor-pointer"
               style={{ background: "rgba(0,0,0,0.65)" }}>
               <CameraOff size={13} color="#fff" />
             </button>
