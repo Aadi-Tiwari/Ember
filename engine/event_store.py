@@ -21,6 +21,7 @@ class EventStore:
     def __init__(self, max_events: int = 100_000):
         self._events: deque[Event] = deque(maxlen=max_events)
         self._latest_vitals: Optional[dict] = None
+        self._latest_emotion: Optional[dict] = None
         self._lock = Lock()
 
     def add(self, event: Event) -> None:
@@ -28,10 +29,16 @@ class EventStore:
             self._events.append(event)
             if event.type == "vitals":
                 self._latest_vitals = event.data
+            elif event.type == "emotion":
+                self._latest_emotion = event.data
 
     def get_vitals(self) -> Optional[dict]:
         with self._lock:
             return self._latest_vitals
+
+    def get_emotion(self) -> Optional[dict]:
+        with self._lock:
+            return self._latest_emotion
 
     def get_message_metadata(self) -> dict:
         """
