@@ -101,22 +101,7 @@ export default function ChatPanel({ active }: Props) {
   }
 
   return (
-    <div className="flex flex-col rounded-2xl overflow-hidden"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)", height: 480 }}>
-
-      {/* Header */}
-      <div className="flex items-center gap-2 px-5 py-3.5"
-        style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
-        <div className="w-5 h-5 rounded-full flex items-center justify-center"
-          style={{ background: "var(--amber)", fontSize: 9, fontWeight: 700, color: "#000" }}>E</div>
-        <span className="text-xs font-medium">Ember</span>
-        <span className="text-xs" style={{ color: "var(--muted)" }}>AI wellness companion</span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <motion.div className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e" }}
-            animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 2, repeat: Infinity }} />
-          <span className="text-xs" style={{ color: "var(--muted)" }}>Online</span>
-        </div>
-      </div>
+    <div className="flex flex-col h-full overflow-hidden">
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">

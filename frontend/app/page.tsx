@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Shield, Play, Eye, Mic, MessageSquare, ChevronRight } from "lucide-react";
+import {
+  Activity, Shield, Play, Eye, Mic, MessageSquare, X, ChevronRight,
+} from "lucide-react";
 import LiveBadge from "../components/LiveBadge";
 import FaceCam from "../components/FaceCam";
 import VoicePanel from "../components/VoicePanel";
@@ -9,8 +11,6 @@ import ChatPanel from "../components/ChatPanel";
 import Evaluate from "../components/Evaluate";
 import { useLiveStream } from "../hooks/useLiveStream";
 import { useActivityTracker } from "../hooks/useActivityTracker";
-
-type Tab = "camera" | "voice" | "chat";
 
 function scoreColor(s: number) {
   if (s < 30) return "#22c55e";
@@ -25,26 +25,27 @@ function scoreLabel(s: number) {
   return "Critical";
 }
 
-const TABS: { id: Tab; icon: React.ElementType; label: string }[] = [
-  { id: "camera", icon: Eye,           label: "Camera" },
-  { id: "voice",  icon: Mic,           label: "Voice"  },
-  { id: "chat",   icon: MessageSquare, label: "Chat"   },
-];
-
 export default function Home() {
   const [sessionActive, setSessionActive] = useState(false);
-  const [activeTab, setActiveTab]         = useState<Tab>("camera");
+  const [chatOpen, setChatOpen]           = useState(false);
   const [showEvaluate, setShowEvaluate]   = useState(false);
 
   const live        = useLiveStream();
   const localVitals = useActivityTracker(sessionActive);
 
   function startSession() { setSessionActive(true); live.connect(); }
-  function stopSession()  { setSessionActive(false); live.disconnect(); setShowEvaluate(false); }
+  function stopSession()  {
+    setSessionActive(false);
+    live.disconnect();
+    setChatOpen(false);
+    setShowEvaluate(false);
+  }
 
-  const vitals = live.state.vitals ?? (localVitals
-    ? { mouse_velocity: localVitals.mouse_velocity_px_s, key_rate: localVitals.key_rate_per_min, idle_ratio: localVitals.idle_ratio }
-    : null);
+  const vitals = live.state.vitals ?? (localVitals ? {
+    mouse_velocity: localVitals.mouse_velocity_px_s,
+    key_rate:       localVitals.key_rate_per_min,
+    idle_ratio:     localVitals.idle_ratio,
+  } : null);
 
   const hasScore = live.state.riskScore !== null;
   const score    = live.state.riskScore ?? 0;
@@ -53,78 +54,53 @@ export default function Home() {
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
 
-      {/* ── Floating pill header ── */}
-      <div className="sticky top-0 z-40 px-6 py-3"
-        style={{ background: "rgba(10,10,10,0.6)", backdropFilter: "blur(12px)" }}>
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between px-4 py-2.5 rounded-2xl"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      {/* ── Minimal header ── */}
+      <header className="sticky top-0 z-40"
+        style={{ background: "rgba(10,10,10,0.88)", backdropFilter: "blur(16px)", borderBottom: "1px solid var(--border)" }}>
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
 
-            {/* Logo */}
-            <div className="flex items-center gap-2.5 min-w-[120px]">
-              <div className="w-6 h-6 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.2)" }}>
-                <Activity size={12} color="var(--amber)" />
+          {/* Logo */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.2)" }}>
+              <Activity size={14} color="var(--amber)" />
+            </div>
+            <span className="text-sm font-semibold tracking-tight">Ember</span>
+            {sessionActive && <LiveBadge connected={live.state.connected} waiting={live.state.waiting} />}
+          </div>
+
+          {/* Right: score + evaluate (when active) OR privacy note */}
+          <div className="flex items-center gap-3">
+            {sessionActive ? (
+              <>
+                {hasScore && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold tabular" style={{ color }}>{score}</span>
+                    <span className="text-xs" style={{ color: "var(--muted)" }}>{scoreLabel(score)}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => hasScore && setShowEvaluate(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium"
+                  style={{
+                    background: hasScore ? color + "15" : "var(--surface-2)",
+                    border:     `1px solid ${hasScore ? color + "35" : "var(--border)"}`,
+                    color:      hasScore ? color : "var(--muted)",
+                    cursor:     hasScore ? "pointer" : "default",
+                    opacity:    hasScore ? 1 : 0.55,
+                  }}>
+                  Evaluate {hasScore && <ChevronRight size={11} />}
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
+                <Shield size={11} />
+                <span className="text-xs">On-device only</span>
               </div>
-              <span className="text-sm font-semibold tracking-tight">Ember</span>
-            </div>
-
-            {/* Center: tabs when active, privacy when idle */}
-            <div className="flex items-center justify-center">
-              {sessionActive ? (
-                <div className="flex items-center gap-0.5 p-0.5 rounded-xl"
-                  style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-                  {TABS.map(({ id, icon: Icon, label }) => (
-                    <button key={id} onClick={() => setActiveTab(id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors"
-                      style={{
-                        background: activeTab === id ? "var(--surface)" : "transparent",
-                        color:      activeTab === id ? "var(--text)"    : "var(--muted)",
-                      }}>
-                      <Icon size={11} />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
-                  <Shield size={11} />
-                  <span className="text-xs">On-device only</span>
-                </div>
-              )}
-            </div>
-
-            {/* Right: score + evaluate OR live badge */}
-            <div className="flex items-center gap-3 min-w-[120px] justify-end">
-              {sessionActive ? (
-                <>
-                  {hasScore && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-bold tabular" style={{ color }}>{score}</span>
-                      <span className="text-xs" style={{ color: "var(--muted)" }}>{scoreLabel(score)}</span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => hasScore && setShowEvaluate(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium"
-                    style={{
-                      background: hasScore ? color + "15" : "var(--surface-2)",
-                      border:     `1px solid ${hasScore ? color + "35" : "var(--border)"}`,
-                      color:      hasScore ? color : "var(--muted)",
-                      cursor:     hasScore ? "pointer" : "default",
-                      opacity:    hasScore ? 1 : 0.6,
-                    }}>
-                    Evaluate
-                    {hasScore && <ChevronRight size={11} />}
-                  </button>
-                </>
-              ) : (
-                <LiveBadge connected={false} waiting={false} />
-              )}
-            </div>
+            )}
           </div>
         </div>
-      </div>
+      </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         <AnimatePresence mode="wait">
@@ -155,14 +131,16 @@ export default function Home() {
               </motion.button>
 
               <div className="flex items-center gap-2 flex-wrap justify-center">
-                {TABS.map(({ id, icon: Icon, label }) => (
-                  <div key={id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs"
+                {[
+                  { icon: Eye,            label: "Face detection"  },
+                  { icon: Mic,            label: "Voice analysis"  },
+                  { icon: MessageSquare,  label: "AI wellness chat" },
+                ].map(({ icon: Icon, label }) => (
+                  <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs"
                     style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
-                    <Icon size={11} />
-                    {label}
+                    <Icon size={11} /> {label}
                   </div>
                 ))}
-                <span className="text-xs" style={{ color: "var(--muted-2)" }}>Nothing leaves your device</span>
               </div>
             </motion.div>
           )}
@@ -170,13 +148,15 @@ export default function Home() {
           {/* ── ACTIVE SESSION ── */}
           {sessionActive && (
             <motion.div key="active" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="flex flex-col gap-6">
+              className="flex flex-col gap-5">
 
               {/* Vitals strip */}
               {vitals && (
                 <div className="flex items-center gap-5 text-xs" style={{ color: "var(--muted)" }}>
                   <span>
-                    <span className="tabular font-semibold" style={{ color: "var(--text)" }}>{vitals.mouse_velocity.toFixed(0)}</span> px/s
+                    <span className="tabular font-semibold" style={{ color: "var(--text)" }}>
+                      {vitals.mouse_velocity.toFixed(0)}
+                    </span> px/s
                   </span>
                   <span>
                     <span className="tabular font-semibold"
@@ -190,49 +170,95 @@ export default function Home() {
                       {(vitals.idle_ratio * 100).toFixed(0)}%
                     </span> idle
                   </span>
-                  <span className="ml-auto flex items-center gap-1.5">
-                    <LiveBadge connected={live.state.connected} waiting={live.state.waiting} />
-                  </span>
                 </div>
               )}
 
-              {/* Tab content */}
-              <AnimatePresence mode="wait">
-                <motion.div key={activeTab}
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
+              {/* Camera + Voice side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                <FaceCam />
+                <VoicePanel active={sessionActive} />
+              </div>
 
-                  {activeTab === "camera" && (
-                    <div className="max-w-sm mx-auto">
-                      <FaceCam />
-                    </div>
-                  )}
-
-                  {activeTab === "voice" && (
-                    <div className="max-w-sm mx-auto">
-                      <VoicePanel active={activeTab === "voice"} />
-                    </div>
-                  )}
-
-                  {activeTab === "chat" && (
-                    <div className="max-w-xl mx-auto">
-                      <ChatPanel active={activeTab === "chat"} />
-                    </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-
-              {/* Bottom hint */}
-              <p className="text-xs text-center" style={{ color: "var(--muted-2)" }}>
-                {activeTab === "camera" && "Face and emotion data is being captured and fused into your score"}
-                {activeTab === "voice"  && "Voice energy, pitch, and affect are being analyzed in real time"}
-                {activeTab === "chat"   && "Your words are analyzed for emotional tone and added to your score"}
-              </p>
+              {/* End session */}
+              <div className="flex justify-center pt-1 pb-4">
+                <button onClick={stopSession}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs cursor-pointer"
+                  style={{ color: "var(--muted)", border: "1px solid var(--border)" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--muted)")}>
+                  End session
+                </button>
+              </div>
             </motion.div>
           )}
 
         </AnimatePresence>
       </main>
+
+      {/* ── Floating chat button (bottom right) ── */}
+      {sessionActive && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.4, type: "spring", stiffness: 260, damping: 20 }}
+          onClick={() => setChatOpen(v => !v)}
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl cursor-pointer"
+          style={{
+            background: chatOpen ? "var(--surface-2)" : "var(--amber)",
+            border:     `2px solid ${chatOpen ? "var(--border)" : "var(--amber)"}`,
+            boxShadow:  chatOpen ? "none" : "0 8px 32px rgba(245,158,11,0.35)",
+          }}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.94 }}>
+          {chatOpen
+            ? <X size={20} color="var(--muted)" />
+            : <MessageSquare size={20} color="#000" />}
+        </motion.button>
+      )}
+
+      {/* ── Chat side panel (ElevenLabs style) ── */}
+      <AnimatePresence>
+        {chatOpen && (
+          <motion.div
+            initial={{ x: "100%", opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "100%", opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed top-0 right-0 bottom-0 z-40 flex flex-col"
+            style={{
+              width: 380,
+              background: "var(--surface)",
+              borderLeft: "1px solid var(--border)",
+              boxShadow: "-8px 0 40px rgba(0,0,0,0.4)",
+            }}>
+
+            {/* Panel header */}
+            <div className="flex items-center gap-2.5 px-5 py-4"
+              style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
+              <div className="w-7 h-7 rounded-full flex items-center justify-center"
+                style={{ background: "var(--amber)", fontSize: 11, fontWeight: 700, color: "#000" }}>
+                E
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold">Ember AI</span>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>Wellness companion</span>
+              </div>
+              <button onClick={() => setChatOpen(false)}
+                className="ml-auto p-1.5 rounded-lg cursor-pointer"
+                style={{ color: "var(--muted)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--muted)")}>
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Chat fills the rest */}
+            <div className="flex-1 overflow-hidden">
+              <ChatPanel active={chatOpen} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Evaluate modal */}
       <Evaluate
