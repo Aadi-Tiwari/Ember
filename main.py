@@ -44,7 +44,7 @@ async def live_stream(ws: WebSocket):
     await ws.accept()
     try:
         while True:
-            await asyncio.sleep(4)
+            await asyncio.sleep(2)
             await _push(ws)
     except (WebSocketDisconnect, Exception):
         pass
