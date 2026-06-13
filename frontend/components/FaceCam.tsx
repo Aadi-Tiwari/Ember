@@ -71,24 +71,24 @@ export default function FaceCam({ onEmotion }: Props) {
   const onEmotionRef   = useRef(onEmotion);
   const showOverlayRef = useRef(true);
 
+  // All useState declarations must come before any useEffect that references them
+  const [phase, setPhase]             = useState<"idle" | "loading" | "active">("idle");
+  const [error, setError]             = useState("");
+  const [emotions, setEmotions]       = useState<EmotionScores | null>(null);
+  const [pose, setPose]               = useState<{ pitch: number; yaw: number; roll: number } | null>(null);
+  const [eyeOpen, setEyeOpen]         = useState(1);
+  const [perclos, setPerclos]         = useState(0);
+  const [faceFound, setFaceFound]     = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
+
   useEffect(() => { onEmotionRef.current = onEmotion; }, [onEmotion]);
   useEffect(() => {
     showOverlayRef.current = showOverlay;
-    // Clear canvas immediately when overlay is hidden
     if (!showOverlay) {
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
   }, [showOverlay]);
-
-  const [phase, setPhase]         = useState<"idle" | "loading" | "active">("idle");
-  const [error, setError]         = useState("");
-  const [emotions, setEmotions]   = useState<EmotionScores | null>(null);
-  const [pose, setPose]           = useState<{ pitch: number; yaw: number; roll: number } | null>(null);
-  const [eyeOpen, setEyeOpen]     = useState(1);
-  const [perclos, setPerclos]     = useState(0);
-  const [faceFound, setFaceFound] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(true);
 
   async function start() {
     setError("");
