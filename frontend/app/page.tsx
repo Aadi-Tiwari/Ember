@@ -66,7 +66,7 @@ export default function Home() {
                 style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.2)" }}>
                 <Activity size={12} color="var(--amber)" />
               </div>
-              <span className="text-sm font-semibold tracking-tight">PulseCheck</span>
+              <span className="text-sm font-semibold tracking-tight">Ember</span>
             </div>
 
             {/* Center: tabs when active, privacy when idle */}
@@ -142,7 +142,7 @@ export default function Home() {
                   <span style={{ color: "var(--amber)" }}>detected early.</span>
                 </h1>
                 <p className="text-base leading-relaxed" style={{ color: "var(--muted)" }}>
-                  Your mental check engine light. Reads face, voice, and how you describe yourself - all on your device.
+                  Your mental check engine light. Reads face, voice, and how you describe yourself - everything stays on your device.
                 </p>
               </div>
 

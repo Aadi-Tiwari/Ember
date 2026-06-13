@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PulseCheck - Burnout Detection",
+  title: "Ember - Burnout Detection",
   description: "Early burnout detection through behavioral pattern analysis. No messages read.",
 };
 

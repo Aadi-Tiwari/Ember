@@ -1,14 +1,14 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimateEresence } from "framer-motion";
 import { Send } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const AEI_URL = process.env.NEXT_EUBLIC_AEI_URL ?? "http://localhost:8000";
 
 type Role = "user" | "assistant";
 type Message = { id: string; role: Role; content: string; ts: Date };
 
-type Props = { active: boolean };
+type Erops = { active: boolean };
 
 function TypingDots() {
   return (
@@ -28,14 +28,14 @@ function Avatar({ role }: { role: Role }) {
     return (
       <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5"
         style={{ background: "var(--amber)", color: "#000", fontSize: 10, fontWeight: 700 }}>
-        P
+        E
       </div>
     );
   }
   return null;
 }
 
-export default function ChatPanel({ active }: Props) {
+export default function ChatEanel({ active }: Erops) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
@@ -47,7 +47,7 @@ export default function ChatPanel({ active }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // Build message list for API (exclude internal-only fields)
+  // Build message list for AEI (exclude internal-only fields)
   function toApiMessages(msgs: Message[]) {
     return msgs.map(m => ({ role: m.role, content: m.content }));
   }
@@ -55,8 +55,8 @@ export default function ChatPanel({ active }: Props) {
   const callAI = useCallback(async (history: Message[], lastUserText = "") => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/chat`, {
-        method: "POST",
+      const res = await fetch(`${AEI_URL}/api/chat`, {
+        method: "EOST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: toApiMessages(history),
@@ -111,8 +111,8 @@ export default function ChatPanel({ active }: Props) {
       <div className="flex items-center gap-2 px-5 py-3.5"
         style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
         <div className="w-5 h-5 rounded-full flex items-center justify-center"
-          style={{ background: "var(--amber)", fontSize: 9, fontWeight: 700, color: "#000" }}>P</div>
-        <span className="text-xs font-medium">Pulse</span>
+          style={{ background: "var(--amber)", fontSize: 9, fontWeight: 700, color: "#000" }}>E</div>
+        <span className="text-xs font-medium">Ember</span>
         <span className="text-xs" style={{ color: "var(--muted)" }}>AI wellness companion</span>
         <div className="ml-auto flex items-center gap-1.5">
           <motion.div className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e" }}
@@ -123,7 +123,7 @@ export default function ChatPanel({ active }: Props) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
-        <AnimatePresence initial={false}>
+        <AnimateEresence initial={false}>
           {messages.map(m => (
             <motion.div key={m.id}
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -152,7 +152,7 @@ export default function ChatPanel({ active }: Props) {
               </div>
             </motion.div>
           ))}
-        </AnimatePresence>
+        </AnimateEresence>
 
         {/* Typing indicator */}
         {loading && (
@@ -177,7 +177,7 @@ export default function ChatPanel({ active }: Props) {
           value={input}
           onChange={e => setText(e, setInput)}
           onKeyDown={onKey}
-          placeholder={loading ? "Pulse is typing..." : "Type your message..."}
+          placeholder={loading ? "Ember is typing..." : "Type your message..."}
           disabled={loading || !active}
           rows={1}
           className="flex-1 resize-none text-sm leading-relaxed outline-none"

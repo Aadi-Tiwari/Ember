@@ -26,7 +26,7 @@ AI_KEY      = GROQ_KEY or OPENAI_KEY
 AI_BASE_URL = "https://api.groq.com/openai/v1" if GROQ_KEY else "https://api.openai.com/v1"
 AI_MODEL    = "llama-3.3-70b-versatile" if GROQ_KEY else "gpt-4o-mini"
 
-AI_SYSTEM = """You are Pulse, a compassionate mental wellness companion inside PulseCheck - a burnout early detection app.
+AI_SYSTEM = """You are Ember, a compassionate mental wellness companion inside Ember - a burnout early detection app.
 
 Your goals:
 - Create a safe, non-judgmental space for the user to express how they truly feel
@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="PulseCheck", lifespan=lifespan)
+app = FastAPI(title="Ember", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
