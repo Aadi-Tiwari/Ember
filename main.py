@@ -18,7 +18,13 @@ try:
 except ImportError:
     pass
 
-ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# Supports Groq (free), OpenAI, or any OpenAI-compatible provider
+# Priority: GROQ_API_KEY > OPENAI_API_KEY
+GROQ_KEY    = os.getenv("GROQ_API_KEY", "")
+OPENAI_KEY  = os.getenv("OPENAI_API_KEY", "")
+AI_KEY      = GROQ_KEY or OPENAI_KEY
+AI_BASE_URL = "https://api.groq.com/openai/v1" if GROQ_KEY else "https://api.openai.com/v1"
+AI_MODEL    = "llama-3.3-70b-versatile" if GROQ_KEY else "gpt-4o-mini"
 
 AI_SYSTEM = """You are Pulse, a compassionate mental wellness companion inside PulseCheck - a burnout early detection app.
 
@@ -145,25 +151,29 @@ async def _push(ws: WebSocket):
 
 @app.post("/api/chat")
 async def ai_chat(body: dict):
-    """AI wellness chat powered by Claude. Replies + scores emotional state."""
-    if not ANTHROPIC_KEY:
-        return {"reply": "AI chat requires an ANTHROPIC_API_KEY in your .env file.", "error": True}
+    """AI wellness chat - works with Groq (free) or OpenAI."""
+    if not AI_KEY:
+        return {
+            "reply": "AI chat needs an API key. Add GROQ_API_KEY to your .env file (free at console.groq.com).",
+            "error": True,
+        }
 
     messages = body.get("messages", [])
+    # Seed with a system-level greeting trigger if conversation is empty
+    api_messages = messages if messages else [{"role": "user", "content": "begin"}]
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+        from openai import OpenAI
+        client = OpenAI(api_key=AI_KEY, base_url=AI_BASE_URL)
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        response = client.chat.completions.create(
+            model=AI_MODEL,
             max_tokens=400,
-            system=AI_SYSTEM,
-            messages=messages if messages else [{"role": "user", "content": "hello"}],
+            messages=[{"role": "system", "content": AI_SYSTEM}] + api_messages,
         )
-        raw = response.content[0].text
+        raw = response.choices[0].message.content or ""
 
-        # Extract assessment block
+        # Strip <assessment> block before sending to user
         match = re.search(r"<assessment>(.*?)</assessment>", raw, re.DOTALL)
         reply = re.sub(r"<assessment>.*?</assessment>", "", raw, flags=re.DOTALL).strip()
 
@@ -185,8 +195,8 @@ async def ai_chat(body: dict):
 
         return {"reply": reply or "I'm here for you. How are you feeling?"}
 
-    except Exception as exc:
-        return {"reply": "Something went wrong connecting to the AI. Check your API key.", "error": True}
+    except Exception:
+        return {"reply": "Could not reach the AI. Check your API key and internet connection.", "error": True}
 
 
 @app.get("/health")
