@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 import aiosqlite
 from pathlib import Path
 
-DB_PATH = Path("pulsecheck.db")
+DB_PATH = Path("ember.db")
 
 
 @asynccontextmanager
