@@ -19,7 +19,7 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Figtree", "Inter", system-ui, -apple-system, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
 }
@@ -28,20 +28,9 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-.tabular       { font-variant-numeric: tabular-nums; }
-.font-sora     { font-family: "Sora", system-ui, sans-serif; }
+.tabular { font-variant-numeric: tabular-nums; }
+.font-sora    { font-family: "Sora", system-ui, sans-serif; }
 .font-garamond { font-family: "EB Garamond", Georgia, "Times New Roman", serif; }
-.font-figtree  { font-family: "Figtree", system-ui, sans-serif; }
-
-/* Wispr Flow-style section label */
-.wf-label {
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.35);
-  font-family: "Figtree", system-ui, sans-serif;
-}
 
 /* ── Centered amber aura (WhisperFlow-style hero glow) ── */
 @keyframes breathe {

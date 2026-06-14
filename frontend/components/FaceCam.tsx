@@ -3,6 +3,18 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Camera, CameraOff, Loader, Eye, Activity, Layers } from "lucide-react";
 
+// MediaPipe's WASM module routes its C++ stderr through console.error, producing
+// "INFO: Created TensorFlow Lite XNNPACK delegate for CPU." on every detection call.
+// This patches it out so Next.js dev mode doesn't surface it as an error overlay.
+if (typeof window !== "undefined") {
+  const _orig = console.error.bind(console);
+  console.error = (...args: any[]) => {
+    const msg = typeof args[0] === "string" ? args[0] : "";
+    if (/^INFO:|XNNPACK|TensorFlow Lite|EGL|WebGL|MediaPipe/.test(msg)) return;
+    _orig(...args);
+  };
+}
+
 const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const SEND_INTERVAL = 4000;
 
