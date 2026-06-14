@@ -1,231 +1,223 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const API_URL          = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const SAMPLE_MS        = 80;
-const SEND_INTERVAL_MS = 6_000;
-const WINDOW_SAMPLES   = Math.floor(30_000 / SAMPLE_MS); // 30-second rolling window
-const SPEAKING_THRESH  = 0.015;
-const PITCH_HISTORY    = 60; // keep last 60 F0 values for jitter / variation
+const FFT_SIZE         = 2048;
+const SAMPLE_MS        = 100;
+const SEND_MS          = 6_000;
+const WINDOW           = Math.floor(30_000 / SAMPLE_MS); // 300 samples = 30s
+const SPEAKING_THRESH  = 0.01;   // RMS threshold for voice activity
+const PITCH_HISTORY    = 40;
 
 export type VoiceData = {
-  energy:            number;  // 0-1 RMS amplitude
-  cadence:           number;  // 0-1 fraction of time speaking
-  pitch_hz:          number;  // fundamental frequency in Hz (-1 = undetected)
-  pitch_variation:   number;  // 0-1 normalised pitch std-dev (expressiveness)
-  jitter:            number;  // 0-1 cycle-to-cycle pitch instability (stress proxy)
-  spectral_centroid: number;  // 0-1 normalised brightness (stress proxy)
-  is_speaking:       boolean;
+  energy:          number;
+  cadence:         number;
+  pitch_hz:        number;
+  pitch_variation: number;
+  jitter:          number;
+  spectral_centroid: number;
+  is_speaking:     boolean;
 };
 
-// Autocorrelation pitch detection (cwilso / PitchDetect pattern)
-function detectPitch(buf: Float32Array, sampleRate: number): number {
-  const SIZE = buf.length;
-  const HALF = Math.floor(SIZE / 2);
+/** Reliable autocorrelation pitch detector - human voice range only */
+function detectPitch(buf: Float32Array, sr: number): number {
+  const N    = buf.length;
+  const HALF = Math.floor(N / 2);
 
-  let rms = 0;
-  for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
-  rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.008) return -1;
-
-  // Trim leading/trailing silence
-  let r1 = 0, r2 = SIZE - 1;
-  const THRESH = 0.2;
-  for (let i = 0; i < HALF; i++) { if (Math.abs(buf[i]) < THRESH) { r1 = i; break; } }
-  for (let i = 1; i < HALF; i++) { if (Math.abs(buf[SIZE - i]) < THRESH) { r2 = SIZE - i; break; } }
-
-  const trimmed = buf.slice(r1, r2 + 1);
-  const tLen    = trimmed.length;
-  if (tLen < 2) return -1;
+  // RMS gate - skip if too quiet
+  let sq = 0;
+  for (let i = 0; i < N; i++) sq += buf[i] * buf[i];
+  const rms = Math.sqrt(sq / N);
+  if (rms < 0.01) return -1;
 
   // Autocorrelation
-  const corr = new Float32Array(HALF);
+  const ac = new Float32Array(HALF);
   for (let lag = 0; lag < HALF; lag++) {
     let s = 0;
-    for (let j = 0; j < HALF; j++) s += (trimmed[j] ?? 0) * (trimmed[j + lag] ?? 0);
-    corr[lag] = s;
+    for (let j = 0; j < HALF; j++) s += buf[j] * buf[j + lag];
+    ac[lag] = s;
   }
 
-  // Find first local minimum then scan for max
-  let d = 0;
-  while (d < corr.length - 1 && corr[d] > corr[d + 1]) d++;
+  // Search only in human-voice lag range (80 Hz - 600 Hz)
+  const lagMin = Math.floor(sr / 600);
+  const lagMax = Math.min(Math.floor(sr / 80), HALF - 1);
 
-  let maxVal = -1, maxPos = -1;
-  for (let i = d; i < HALF; i++) {
-    if (corr[i] > maxVal) { maxVal = corr[i]; maxPos = i; }
+  let bestVal = -1, bestLag = -1;
+  for (let lag = lagMin; lag <= lagMax; lag++) {
+    if (ac[lag] > bestVal) { bestVal = ac[lag]; bestLag = lag; }
   }
-  if (maxPos < 2 || maxPos >= HALF - 1) return -1;
 
-  // Parabolic interpolation for sub-sample accuracy
-  const x1 = corr[maxPos - 1], x2 = corr[maxPos], x3 = corr[maxPos + 1];
-  const a  = (x1 + x3 - 2 * x2) / 2;
-  const b  = (x3 - x1) / 2;
-  const T0 = a ? maxPos - b / (2 * a) : maxPos;
+  // Must be at least 50% of zero-lag energy to count as a real pitch
+  if (bestLag < 0 || ac[0] === 0 || bestVal / ac[0] < 0.5) return -1;
 
-  const hz = sampleRate / T0;
-  // Plausible voice range 70 Hz (bass) - 1050 Hz (head voice)
-  return hz >= 70 && hz <= 1050 ? hz : -1;
+  return sr / bestLag;
 }
 
-// Spectral centroid from frequency-domain data (normalised 0-1)
-function spectralCentroid(freqData: Uint8Array, sampleRate: number): number {
-  const N   = freqData.length;
-  const BIN = sampleRate / (N * 2);
+function calcCentroid(freqData: Uint8Array, sr: number): number {
+  const N = freqData.length;
+  const binHz = sr / (N * 2);
   let wSum = 0, sum = 0;
   for (let i = 0; i < N; i++) {
-    const mag  = freqData[i] / 255;
-    const freq = i * BIN;
-    wSum += freq * mag;
+    const mag = freqData[i] / 255;
+    wSum += i * binHz * mag;
     sum  += mag;
   }
-  if (sum < 0.01) return 0;
-  // Normalise: typical voice centroid 300-3000 Hz → map to 0-1
-  return Math.min(1, (wSum / sum) / 3000);
+  return sum < 0.01 ? 0 : Math.min(1, (wSum / sum) / 3000);
 }
 
 export function useVoiceAnalyzer(active: boolean): VoiceData | null {
   const [data, setData] = useState<VoiceData | null>(null);
 
-  const ctxRef      = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const streamRef   = useRef<MediaStream | null>(null);
-  const samplerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const senderRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Rolling buffers
-  const rmsBuffer  = useRef<number[]>([]);
-  const pitchBuf   = useRef<number[]>([]);   // recent F0 values (speaking frames only)
-
-  const compute = useCallback((): VoiceData => {
-    const rms    = rmsBuffer.current;
-    const pitches = pitchBuf.current;
-
-    if (!rms.length) {
-      return { energy: 0, cadence: 0, pitch_hz: -1, pitch_variation: 0, jitter: 0, spectral_centroid: 0, is_speaking: false };
-    }
-
-    const energy      = rms.reduce((s, v) => s + v, 0) / rms.length;
-    const cadence     = rms.filter(v => v > SPEAKING_THRESH).length / rms.length;
-    const is_speaking = (rms[rms.length - 1] ?? 0) > SPEAKING_THRESH;
-
-    // Pitch stats
-    const validPitches = pitches.filter(p => p > 0);
-    const pitch_hz     = validPitches.length ? validPitches[validPitches.length - 1] : -1;
-
-    let pitch_variation = 0;
-    let jitter          = 0;
-
-    if (validPitches.length >= 4) {
-      const mean = validPitches.reduce((s, v) => s + v, 0) / validPitches.length;
-      const std  = Math.sqrt(validPitches.reduce((s, v) => s + (v - mean) ** 2, 0) / validPitches.length);
-      pitch_variation = Math.min(1, std / 80); // 80 Hz std = max expressiveness
-
-      // Jitter: period-to-period instability (convert F0 to periods first)
-      const periods = validPitches.map(f => 1 / f);
-      const pMean   = periods.reduce((s, v) => s + v, 0) / periods.length;
-      if (pMean > 0) {
-        const pStd = Math.sqrt(periods.reduce((s, v) => s + (v - pMean) ** 2, 0) / periods.length);
-        jitter = Math.min(1, (pStd / pMean) * 20); // scale: 5% jitter = 1.0
-      }
-    }
-
-    return {
-      energy:            +energy.toFixed(4),
-      cadence:           +cadence.toFixed(4),
-      pitch_hz:          pitch_hz > 0 ? +pitch_hz.toFixed(1) : -1,
-      pitch_variation:   +pitch_variation.toFixed(4),
-      jitter:            +jitter.toFixed(4),
-      spectral_centroid: 0, // filled below from latest freq data
-      is_speaking,
-    };
-  }, []);
-
-  const sendToBackend = useCallback((d: VoiceData) => {
-    fetch(`${API_URL}/ingest`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "voice", timestamp: new Date().toISOString(), ...d }),
-    }).catch(() => {});
-  }, []);
+  // Keep refs so the intervals always see the latest values
+  const rmsRef   = useRef<number[]>([]);
+  const pitchRef = useRef<number[]>([]);
+  const frameRef = useRef(0); // separate frame counter - not dependent on buffer length
 
   useEffect(() => {
     if (!active) {
-      if (samplerRef.current) clearInterval(samplerRef.current);
-      if (senderRef.current)  clearInterval(senderRef.current);
-      streamRef.current?.getTracks().forEach(t => t.stop());
-      ctxRef.current?.close().catch(() => {});
-      ctxRef.current = null; analyserRef.current = null; streamRef.current = null;
-      rmsBuffer.current = []; pitchBuf.current = [];
       setData(null);
+      rmsRef.current   = [];
+      pitchRef.current = [];
+      frameRef.current = 0;
       return;
     }
 
-    let cancelled = false;
+    let samplerTimer: ReturnType<typeof setInterval> | null = null;
+    let senderTimer:  ReturnType<typeof setInterval> | null = null;
+    let audioCtx:     AudioContext | null = null;
+    let stream:       MediaStream  | null = null;
+    let alive = true;
 
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
-        streamRef.current = stream;
+        // Request mic with constraints that improve voice detection
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation:  true,
+            noiseSuppression:  true,
+            autoGainControl:   true,
+            channelCount:      1,
+          },
+          video: false,
+        });
+        if (!alive) { stream.getTracks().forEach(t => t.stop()); return; }
 
-        const ctx = new AudioContext();
-        ctxRef.current = ctx;
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 2048;
-        analyserRef.current = analyser;
-        ctx.createMediaStreamSource(stream).connect(analyser);
+        // Create AudioContext and RESUME it (critical - browsers suspend by default)
+        audioCtx = new AudioContext({ sampleRate: 44100 });
+        await audioCtx.resume();
+        if (!alive) { audioCtx.close(); stream.getTracks().forEach(t => t.stop()); return; }
+
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize                = FFT_SIZE;
+        analyser.smoothingTimeConstant  = 0.5; // smooth out frame-to-frame noise
+        audioCtx.createMediaStreamSource(stream).connect(analyser);
 
         const timeBuf = new Float32Array(analyser.fftSize);
         const freqBuf = new Uint8Array(analyser.frequencyBinCount);
+        const sr      = audioCtx.sampleRate;
 
-        samplerRef.current = setInterval(() => {
-          const a = analyserRef.current;
-          if (!a) return;
+        // ── Sample loop ──────────────────────────────────────────────────────
+        samplerTimer = setInterval(() => {
+          if (!alive) return;
 
-          a.getFloatTimeDomainData(timeBuf);
-          a.getByteFrequencyData(freqBuf);
+          analyser.getFloatTimeDomainData(timeBuf);
+          analyser.getByteFrequencyData(freqBuf);
 
           // RMS energy
           let sq = 0;
           for (let i = 0; i < timeBuf.length; i++) sq += timeBuf[i] * timeBuf[i];
           const rms = Math.sqrt(sq / timeBuf.length);
-          rmsBuffer.current.push(rms);
-          if (rmsBuffer.current.length > WINDOW_SAMPLES) rmsBuffer.current.shift();
 
-          // Pitch detection (only on speaking frames to avoid noise floor)
+          rmsRef.current.push(rms);
+          if (rmsRef.current.length > WINDOW) rmsRef.current.shift();
+
+          // Only run pitch on voiced frames
           if (rms > SPEAKING_THRESH) {
-            const f0 = detectPitch(timeBuf, ctx.sampleRate);
-            pitchBuf.current.push(f0);
-            if (pitchBuf.current.length > PITCH_HISTORY) pitchBuf.current.shift();
+            const f0 = detectPitch(timeBuf, sr);
+            if (f0 > 0) {
+              pitchRef.current.push(f0);
+              if (pitchRef.current.length > PITCH_HISTORY) pitchRef.current.shift();
+            }
           }
 
-          // Update display every ~6 samples (~480ms)
-          if (rmsBuffer.current.length % 6 === 0) {
-            const d = compute();
-            // Attach latest spectral centroid
-            d.spectral_centroid = spectralCentroid(freqBuf, ctx.sampleRate);
-            setData(d);
+          // Update display every 5 frames (~500ms) using a dedicated counter
+          frameRef.current += 1;
+          if (frameRef.current % 5 === 0) {
+            setData(buildVoiceData(rmsRef.current, pitchRef.current, freqBuf, sr));
           }
         }, SAMPLE_MS);
 
-        // Send to backend with spectral centroid attached
-        senderRef.current = setInterval(() => {
-          const d = compute();
-          if (analyserRef.current && ctxRef.current) {
-            const fb = new Uint8Array(analyserRef.current.frequencyBinCount);
-            analyserRef.current.getByteFrequencyData(fb);
-            d.spectral_centroid = spectralCentroid(fb, ctxRef.current.sampleRate);
-          }
-          sendToBackend(d);
-        }, SEND_INTERVAL_MS);
+        // ── Send to backend ───────────────────────────────────────────────────
+        senderTimer = setInterval(() => {
+          if (!alive) return;
+          analyser.getByteFrequencyData(freqBuf);
+          const d = buildVoiceData(rmsRef.current, pitchRef.current, freqBuf, sr);
+          fetch(`${API_URL}/ingest`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "voice", timestamp: new Date().toISOString(), ...d }),
+          }).catch(() => {});
+        }, SEND_MS);
 
       } catch {
-        // Mic permission denied or unavailable
+        // Mic permission denied or device unavailable - fail silently
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [active, compute, sendToBackend]);
+    // Full cleanup including intervals and streams
+    return () => {
+      alive = false;
+      if (samplerTimer) clearInterval(samplerTimer);
+      if (senderTimer)  clearInterval(senderTimer);
+      stream?.getTracks().forEach(t => t.stop());
+      audioCtx?.close().catch(() => {});
+      rmsRef.current   = [];
+      pitchRef.current = [];
+      frameRef.current = 0;
+    };
+  }, [active]);
 
   return data;
+}
+
+function buildVoiceData(
+  rms: number[],
+  pitches: number[],
+  freqBuf: Uint8Array,
+  sr: number,
+): VoiceData {
+  if (!rms.length) {
+    return { energy: 0, cadence: 0, pitch_hz: -1, pitch_variation: 0, jitter: 0, spectral_centroid: 0, is_speaking: false };
+  }
+
+  const energy      = rms.reduce((s, v) => s + v, 0) / rms.length;
+  const cadence     = rms.filter(v => v > SPEAKING_THRESH).length / rms.length;
+  const is_speaking = rms.length > 0 && rms[rms.length - 1] > SPEAKING_THRESH;
+
+  const valid   = pitches.filter(p => p > 0);
+  const pitch_hz = valid.length ? valid[valid.length - 1] : -1;
+
+  let pitch_variation = 0, jitter = 0;
+  if (valid.length >= 4) {
+    const mean = valid.reduce((s, v) => s + v, 0) / valid.length;
+    const std  = Math.sqrt(valid.reduce((s, v) => s + (v - mean) ** 2, 0) / valid.length);
+    pitch_variation = Math.min(1, std / 80);
+
+    const periods = valid.map(f => 1 / f);
+    const pMean   = periods.reduce((s, v) => s + v, 0) / periods.length;
+    if (pMean > 0) {
+      const pStd = Math.sqrt(periods.reduce((s, v) => s + (v - pMean) ** 2, 0) / periods.length);
+      jitter = Math.min(1, (pStd / pMean) * 20);
+    }
+  }
+
+  return {
+    energy:            +energy.toFixed(4),
+    cadence:           +cadence.toFixed(4),
+    pitch_hz:          pitch_hz > 0 ? +pitch_hz.toFixed(1) : -1,
+    pitch_variation:   +pitch_variation.toFixed(4),
+    jitter:            +jitter.toFixed(4),
+    spectral_centroid: calcCentroid(freqBuf, sr),
+    is_speaking,
+  };
 }
