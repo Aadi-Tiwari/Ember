@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --bg:         #0a0a0a;
+  --bg:         #080808;
   --surface:    #111111;
   --surface-2:  #161616;
   --border:     #222222;
@@ -14,20 +14,96 @@
   --orange:     #f97316;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-family: "Figtree", "Inter", system-ui, -apple-system, sans-serif;
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
-  margin: 0;
 }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-/* Tabular numbers everywhere by default */
-.tabular { font-variant-numeric: tabular-nums; }
+.tabular       { font-variant-numeric: tabular-nums; }
+.font-sora     { font-family: "Sora", system-ui, sans-serif; }
+.font-garamond { font-family: "EB Garamond", Georgia, "Times New Roman", serif; }
+.font-figtree  { font-family: "Figtree", system-ui, sans-serif; }
+
+/* Wispr Flow-style section label */
+.wf-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  font-family: "Figtree", system-ui, sans-serif;
+}
+
+/* ── Centered amber aura (WhisperFlow-style hero glow) ── */
+@keyframes breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%       { opacity: 0.75; transform: scale(1.08); }
+}
+@keyframes breathe-slow {
+  0%, 100% { opacity: 0.35; transform: scale(1) rotate(0deg); }
+  50%       { opacity: 0.5;  transform: scale(1.12) rotate(6deg); }
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(245,158,11,0.28); }
+  70%  { box-shadow: 0 0 0 18px rgba(245,158,11,0); }
+  100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+}
+
+.aura-center {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.aura-1 {
+  width: 800px; height: 800px;
+  background: radial-gradient(circle, rgba(245,158,11,0.13) 0%, rgba(249,115,22,0.05) 45%, transparent 70%);
+  animation: breathe 8s ease-in-out infinite;
+}
+.aura-2 {
+  width: 540px; height: 540px;
+  background: radial-gradient(circle, rgba(251,191,36,0.1) 0%, transparent 65%);
+  animation: breathe-slow 12s ease-in-out infinite;
+}
+.aura-3 {
+  width: 280px; height: 280px;
+  background: radial-gradient(circle, rgba(245,158,11,0.18) 0%, transparent 60%);
+  animation: breathe 5s ease-in-out infinite;
+}
+
+/* ── Subtle grain noise ── */
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+/* ── Waveform bars ── */
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50%       { transform: scaleY(1); }
+}
+.wave-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(245,158,11,0.5);
+  transform-origin: center bottom;
+}
+
+/* Hero fade-up */
+@keyframes hero-fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: none; }
+}

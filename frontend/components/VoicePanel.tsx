@@ -1,16 +1,11 @@
 "use client";
-import { motion, AnimatePresence } from "framer-motion";
-import { Mic } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { Mic, MicOff } from "lucide-react";
 import { useVoiceAnalyzer } from "../hooks/useVoiceAnalyzer";
+import { VoicePoweredOrb } from "./ui/voice-powered-orb";
 
 type Props = { active: boolean };
-
-const N_BARS = 48;
-
-// Deterministic noise per bar (no Math.random - prevents hydration mismatch)
-const NOISE = Array.from({ length: N_BARS }, (_, i) =>
-  0.55 + 0.45 * Math.abs(Math.sin(i * 1.9 + 0.7))
-);
 
 function jitterColor(j: number) {
   if (j < 10) return "#22c55e";
@@ -19,7 +14,11 @@ function jitterColor(j: number) {
 }
 
 export default function VoicePanel({ active }: Props) {
-  const voice = useVoiceAnalyzer(active);
+  const [micEnabled, setMicEnabled] = useState(false);
+
+  useEffect(() => { if (!active) setMicEnabled(false); }, [active]);
+
+  const voice = useVoiceAnalyzer(active && micEnabled);
 
   const energy     = voice?.energy      ?? 0;
   const speaking   = voice?.is_speaking ?? false;
@@ -28,99 +27,97 @@ export default function VoicePanel({ active }: Props) {
   const cadencePct = Math.round((voice?.cadence ?? 0) * 100);
   const energyPct  = Math.min(100, Math.round(energy * 200));
 
+  const stressScore = Math.min(100, Math.round(jitterPct * 0.7 + Math.max(0, 25 - energyPct) * 0.8));
+  const stressColor = stressScore < 30 ? "#22c55e" : stressScore < 60 ? "#f59e0b" : "#ef4444";
+  const stressLabel = stressScore < 30 ? "Normal" : stressScore < 60 ? "Elevated" : "High";
+  const stressDesc  = stressScore < 30
+    ? "Voice patterns are steady and consistent."
+    : stressScore < 60
+    ? "Some vocal instability - common during focused work."
+    : "High vocal stress detected, possibly from fatigue or tension.";
+
   return (
     <div className="rounded-2xl flex flex-col overflow-hidden"
       style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
 
-      {/* ── Visualizer ── */}
-      <div className="relative flex items-center justify-center gap-px px-5 overflow-hidden"
-        style={{ height: 220, background: "var(--surface-2)", flexShrink: 0 }}>
+      {/* ── Orb visualizer ── */}
+      <div className="relative overflow-hidden" style={{ height: 240, background: "var(--surface-2)", flexShrink: 0 }}>
 
-        {active && voice ? (
-          <>
-            {/* Bars - grow from center */}
-            {Array.from({ length: N_BARS }).map((_, i) => {
-              const envelope = Math.sin((i / N_BARS) * Math.PI); // bell curve
-              const height   = speaking
-                ? Math.max(6, envelope * energy * 180 * NOISE[i])
-                : 4 + envelope * 18 * NOISE[i];
+        {/* Orb always renders; enableVoiceControl activates voice reactivity */}
+        <div style={{ position: "absolute", inset: 0 }}>
+          <VoicePoweredOrb
+            enableVoiceControl={micEnabled && active}
+            hue={30}
+            voiceSensitivity={2}
+            maxRotationSpeed={1.4}
+            maxHoverIntensity={0.9}
+          />
+        </div>
 
-              const alpha = speaking
-                ? (0.35 + 0.65 * NOISE[i]).toFixed(2)
-                : "0.25";
-
-              return (
-                <motion.div
-                  key={i}
-                  className="rounded-full flex-1"
-                  style={{
-                    background: speaking
-                      ? `rgba(245,158,11,${alpha})`
-                      : `rgba(255,255,255,0.1)`,
-                    maxWidth: 5,
-                    minWidth: 2,
-                  }}
-                  animate={{ height: Math.max(4, Math.min(200, height)) }}
-                  transition={{ duration: 0.11, ease: "easeOut" }}
-                />
-              );
-            })}
-
-            {/* Glow behind bars when speaking */}
-            {speaking && (
-              <motion.div
-                className="absolute inset-0 pointer-events-none"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0.06, 0.14, 0.06] }}
-                transition={{ duration: 1.4, repeat: Infinity }}
-                style={{ background: "radial-gradient(ellipse at center, rgba(245,158,11,0.3) 0%, transparent 70%)" }}
-              />
-            )}
-
-            {/* Status pill - bottom left */}
-            <div className="absolute bottom-3.5 left-5 flex items-center gap-1.5">
-              <motion.div
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ background: speaking ? "var(--amber)" : "var(--muted)" }}
-                animate={{ opacity: speaking ? [1, 0.25, 1] : 0.6 }}
-                transition={{ duration: 0.75, repeat: speaking ? Infinity : 0 }}
-              />
-              <span className="text-xs font-medium"
-                style={{ color: speaking ? "var(--amber)" : "var(--muted)" }}>
-                {speaking ? "Speaking" : "Listening"}
-              </span>
+        {/* Overlay when mic not enabled */}
+        {!micEnabled && (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 14,
+              background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Mic size={20} color="var(--amber)" />
             </div>
+            <button onClick={() => setMicEnabled(true)} style={{
+              background: "rgba(245,158,11,0.14)",
+              border: "1px solid rgba(245,158,11,0.3)",
+              color: "var(--amber)",
+              borderRadius: 10, padding: "6px 16px",
+              fontSize: "0.75rem", fontWeight: 500, cursor: "pointer",
+            }}>
+              Enable Mic
+            </button>
+          </div>
+        )}
 
-            {/* Pitch - top right */}
-            <AnimatePresence>
-              {pitchHz > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="absolute top-3.5 right-5 text-right">
-                  <div className="text-xl font-bold tabular leading-none" style={{ color: "var(--amber)" }}>
-                    {pitchHz.toFixed(0)}
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>Hz</div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        ) : (
-          <div className="flex flex-col items-center gap-3">
+        {/* Status pill when active */}
+        {micEnabled && (
+          <div style={{ position: "absolute", bottom: 14, left: 16, display: "flex", alignItems: "center", gap: 7 }}>
             <motion.div
-              animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.7, 0.4] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}>
-              <Mic size={28} color="var(--muted-2)" />
-            </motion.div>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>
-              {active ? "Starting mic..." : "Mic inactive"}
+              style={{ width: 6, height: 6, borderRadius: "50%", background: speaking ? "var(--amber)" : "rgba(255,255,255,0.4)" }}
+              animate={{ opacity: speaking ? [1, 0.2, 1] : 0.5 }}
+              transition={{ duration: 0.7, repeat: speaking ? Infinity : 0 }}
+            />
+            <span style={{ fontSize: "0.72rem", fontWeight: 500, color: speaking ? "var(--amber)" : "rgba(255,255,255,0.45)" }}>
+              {speaking ? "Speaking" : "Listening"}
             </span>
           </div>
+        )}
+
+        {/* Pitch display */}
+        {micEnabled && pitchHz > 0 && (
+          <div style={{ position: "absolute", top: 14, right: 14, textAlign: "right" }}>
+            <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--amber)", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+              {pitchHz.toFixed(0)}
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Hz</div>
+          </div>
+        )}
+
+        {/* Mic off button */}
+        {micEnabled && (
+          <button onClick={() => setMicEnabled(false)} style={{
+            position: "absolute", top: 10, right: pitchHz > 0 ? 54 : 10,
+            background: "rgba(0,0,0,0.55)", border: "none",
+            padding: 6, borderRadius: 8, cursor: "pointer",
+          }} title="Disable mic">
+            <MicOff size={11} color="rgba(255,255,255,0.6)" />
+          </button>
         )}
       </div>
 
       {/* ── Metrics grid ── */}
-      {voice && active ? (
+      {voice && micEnabled ? (
         <div className="grid grid-cols-2 gap-px" style={{ background: "var(--border)" }}>
           {[
             {
@@ -157,10 +154,34 @@ export default function VoicePanel({ active }: Props) {
           ))}
         </div>
       ) : (
-        <div className="px-5 py-5">
-          <p className="text-xs text-center" style={{ color: "var(--muted)" }}>No audio recorded</p>
+        <div className="px-5 py-5 text-center">
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            {micEnabled ? "Waiting for audio..." : "Mic not enabled"}
+          </p>
         </div>
       )}
+
+      {/* ── Vocal stress ── */}
+      {voice && micEnabled ? (
+        <div className="px-5 py-4 flex flex-col gap-3" style={{ borderTop: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs" style={{ color: "var(--muted)" }}>Vocal stress</span>
+            <span className="text-xs font-semibold" style={{ color: stressColor }}>{stressLabel}</span>
+          </div>
+          <div className="relative h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+            <motion.div className="absolute left-0 top-0 h-full rounded-full"
+              style={{ background: `linear-gradient(90deg, #22c55e 0%, ${stressColor} 100%)` }}
+              animate={{ width: `${stressScore}%` }}
+              transition={{ type: "spring", stiffness: 60, damping: 16 }}
+            />
+          </div>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--muted-2)" }}>{stressDesc}</p>
+        </div>
+      ) : micEnabled ? (
+        <div className="px-5 py-4">
+          <p className="text-xs" style={{ color: "var(--muted-2)" }}>Waiting for audio input...</p>
+        </div>
+      ) : null}
     </div>
   );
 }
