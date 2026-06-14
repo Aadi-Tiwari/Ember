@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity, Shield, Play, Eye, Mic, MessageSquare, X, ChevronRight,
@@ -50,6 +50,16 @@ export default function Home() {
   const hasScore = live.state.riskScore !== null;
   const score    = live.state.riskScore ?? 0;
   const color    = scoreColor(score);
+
+  // Show score in browser tab title when user switches away
+  useEffect(() => {
+    if (sessionActive && hasScore) {
+      document.title = `${score} ${scoreLabel(score)} - Ember`;
+    } else {
+      document.title = "Ember";
+    }
+    return () => { document.title = "Ember"; };
+  }, [sessionActive, hasScore, score]);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
