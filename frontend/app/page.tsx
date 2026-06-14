@@ -103,6 +103,13 @@ export default function Home() {
   const live        = useLiveStream();
   const localVitals = useActivityTracker(sessionActive);
 
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!sessionActive) { setElapsed(0); return; }
+    const id = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [sessionActive]);
+
   useEffect(() => { setHeroVisible(true); }, []);
   useEffect(() => {
     const id = setInterval(() => setWordIndex(i => (i + 1) % WORDS.length), 2600);
@@ -135,6 +142,13 @@ export default function Home() {
     document.title = sessionActive && hasScore ? `${score} ${scoreLabel(score)} - Ember` : "Ember";
     return () => { document.title = "Ember"; };
   }, [sessionActive, hasScore, score]);
+
+  function formatElapsed(secs: number) {
+    const h = Math.floor(secs / 3600).toString().padStart(2, "0");
+    const m = Math.floor((secs % 3600) / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${h}:${m}:${s}`;
+  }
 
   const fadeUp = (delay: number): React.CSSProperties => ({
     opacity: heroVisible ? 1 : 0,
@@ -354,152 +368,163 @@ export default function Home() {
             transition={{ duration: 0.5 }}
             style={{ position: "relative", zIndex: 10, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
-            {/* Sticky glass pill header */}
-            <div style={{ padding: "12px 16px", position: "sticky", top: 0, zIndex: 40 }}>
-              <div style={{
-                background: "rgba(0,0,0,0.55)",
-                backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 18, maxWidth: 960, margin: "0 auto",
-                padding: "0 20px", height: 56,
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
-              }}>
-                {/* Left: logo + badge */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 9, background: "linear-gradient(135deg,rgba(245,158,11,0.3),rgba(249,115,22,0.3))", border: "1px solid rgba(245,158,11,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Activity size={14} color="#f59e0b" />
-                  </div>
-                  <span className="font-sora" style={{ fontWeight: 800, fontSize: "0.9rem", color: "#fff", letterSpacing: "-0.01em" }}>EMBER</span>
-                  <LiveBadge connected={live.state.connected} waiting={live.state.waiting} />
+            {/* Evaluate button - top right */}
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "14px 24px 0" }}>
+              <button onClick={() => hasScore && goToEvaluate()} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 20px", borderRadius: 8,
+                fontSize: "0.84rem", fontWeight: 600,
+                background: "transparent",
+                border: `1px solid ${hasScore ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)"}`,
+                color: hasScore ? "#fff" : "rgba(255,255,255,0.2)",
+                cursor: hasScore ? "pointer" : "default",
+                transition: "all 0.2s",
+              }}
+                onMouseEnter={e => { if (hasScore) e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; }}
+                onMouseLeave={e => { if (hasScore) e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}>
+                Evaluate <ChevronRight size={13} />
+              </button>
+            </div>
+
+            {/* Info bar: score (left) + stats (right) */}
+            <div style={{
+              display: "flex", alignItems: "center",
+              padding: "10px 24px 14px",
+              borderBottom: "1px solid rgba(255,255,255,0.07)",
+              gap: 0,
+            }}>
+              {/* Score ring + labels */}
+              <div style={{ display: "flex", alignItems: "center", gap: 16, paddingRight: 28, borderRight: "1px solid rgba(255,255,255,0.08)", marginRight: 28, flexShrink: 0 }}>
+                <svg width={68} height={68} viewBox="0 0 72 72">
+                  <circle cx={36} cy={36} r={29} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={5} />
+                  <circle cx={36} cy={36} r={29} fill="none" stroke={hasScore ? color : "rgba(255,255,255,0.15)"} strokeWidth={5}
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 29}`}
+                    strokeDashoffset={`${2 * Math.PI * 29 * (1 - (hasScore ? score : 0) / 100)}`}
+                    style={{ rotate: "-90deg", transformOrigin: "36px 36px" }} />
+                  <text x={36} y={43} textAnchor="middle" fill="#fff" fontSize={19} fontWeight={700}>{hasScore ? score : "–"}</text>
+                </svg>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <span style={{ fontSize: "0.58rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.12em", textTransform: "uppercase" }}>Risk Score</span>
+                  <span style={{ fontSize: "1.1rem", fontWeight: 700, color: hasScore ? color : "rgba(255,255,255,0.4)", lineHeight: 1 }}>{hasScore ? scoreLabel(score) : "Scanning..."}</span>
+                  <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.35)" }}>
+                    {!hasScore ? "Collecting signals" : score < 30 ? "No significant signals" : score < 60 ? "Elevated activity detected" : score < 80 ? "Stress indicators present" : "Critical burnout risk"}
+                  </span>
                 </div>
+              </div>
 
-                {/* Center: live score ring */}
-                {hasScore && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    {/* Mini circular indicator */}
-                    <svg width={36} height={36} viewBox="0 0 36 36">
-                      <circle cx={18} cy={18} r={14} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={3} />
-                      <circle cx={18} cy={18} r={14} fill="none" stroke={color} strokeWidth={3}
-                        strokeLinecap="round"
-                        strokeDasharray={`${2 * Math.PI * 14}`}
-                        strokeDashoffset={`${2 * Math.PI * 14 * (1 - score / 100)}`}
-                        style={{ rotate: "-90deg", transformOrigin: "18px 18px" }} />
-                      <text x={18} y={22} textAnchor="middle" fill={color} fontSize={9} fontWeight={700}>{score}</text>
-                    </svg>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                      <span style={{ fontSize: "0.78rem", fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{scoreLabel(score)}</span>
-                      <span className="wf-label" style={{ marginBottom: 0, fontSize: "0.58rem" }}>risk score</span>
+              {/* Stats - value on top, label below */}
+              <div style={{ display: "flex", alignItems: "flex-start", flex: 1, gap: "clamp(1.2rem, 3vw, 3rem)", flexWrap: "wrap" }}>
+                {[
+                  { value: "3",       label: "Sensors Active",   color: "#4ade80",              dot: true  },
+                  { value: "<50ms",   label: "Detection Speed",  color: "#60a5fa",              dot: true  },
+                  { value: "Groq AI", label: "Model",            color: "#a78bfa",              dot: true  },
+                  { value: "100%",    label: "On-device",        color: "#f59e0b",              dot: true  },
+                  { value: vitals ? `${vitals.mouse_velocity.toFixed(0)} px/s` : "0 px/s",   label: "Movement",  color: "rgba(255,255,255,0.78)", dot: false },
+                  { value: vitals ? `${vitals.key_rate.toFixed(0)} bpm`        : "0 bpm",    label: "Key Rate",  color: vitals && vitals.key_rate < 60 ? "#ef4444" : "rgba(255,255,255,0.78)", dot: vitals ? vitals.key_rate < 60 : false },
+                  { value: vitals ? `${(vitals.idle_ratio * 100).toFixed(0)}%` : "10%",     label: "Idle",      color: "rgba(255,255,255,0.78)", dot: false },
+                ].map(s => (
+                  <div key={s.label} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      {s.dot && <div style={{ width: 6, height: 6, borderRadius: "50%", background: s.color, flexShrink: 0 }} />}
+                      <span style={{ fontSize: "0.88rem", fontWeight: 700, color: s.color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{s.value}</span>
                     </div>
+                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.28)", whiteSpace: "nowrap" }}>{s.label}</span>
                   </div>
-                )}
-
-                {/* Right: evaluate button */}
-                <button onClick={() => hasScore && goToEvaluate()} style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "7px 16px", borderRadius: 12, fontSize: "0.78rem", fontWeight: 600,
-                  background: hasScore ? color + "20" : "rgba(255,255,255,0.05)",
-                  border: `1px solid ${hasScore ? color + "40" : "rgba(255,255,255,0.08)"}`,
-                  color: hasScore ? color : "rgba(255,255,255,0.25)",
-                  cursor: hasScore ? "pointer" : "default", opacity: hasScore ? 1 : 0.4,
-                  transition: "all 0.2s",
-                }}>
-                  Evaluate {hasScore && <ChevronRight size={12} />}
-                </button>
+                ))}
               </div>
             </div>
 
-            {/* Content */}
-            <div style={{ flex: 1, maxWidth: 960, margin: "0 auto", width: "100%", padding: "12px 20px 28px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Cards grid */}
+            <div style={{
+              flex: 1,
+              display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16,
+              padding: "16px 24px",
+              ["--surface" as string]:   "transparent",
+              ["--surface-2" as string]: "rgba(255,255,255,0.03)",
+              ["--border" as string]:    "rgba(255,255,255,0.08)",
+              ["--muted" as string]:     "rgba(255,255,255,0.48)",
+              ["--muted-2" as string]:   "rgba(255,255,255,0.25)",
+              ["--text" as string]:      "#ffffff",
+              ["--amber" as string]:     "#f59e0b",
+            } as React.CSSProperties}>
 
-              {/* System stats strip */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                {[
-                  { value: "3", label: "sensors active", color: "#4ade80" },
-                  { value: "<50ms", label: "detection speed", color: "#60a5fa" },
-                  { value: "Groq AI", label: "chat model", color: "#a78bfa" },
-                  { value: "100%", label: "on-device", color: "#f59e0b" },
-                ].map(s => (
-                  <div key={s.label} style={{ background: "rgba(255,255,255,0.07)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "6px 14px", display: "flex", alignItems: "center", gap: 7 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: s.color }} />
-                    <span style={{ fontSize: "0.78rem", fontWeight: 700, color: s.color }}>{s.value}</span>
-                    <span className="wf-label" style={{ marginBottom: 0, fontSize: "0.6rem" }}>{s.label}</span>
+              {/* Face Analysis */}
+              <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+                  <Eye size={22} color="#60a5fa" strokeWidth={1.5} />
+                  <div>
+                    <div style={{ fontSize: "1rem", fontWeight: 600, color: "#fff", letterSpacing: "-0.01em" }}>Face Analysis</div>
+                    <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.32)", marginTop: 2 }}>Emotion • PERCLOS • Pose</div>
                   </div>
-                ))}
-                {/* Vitals inline */}
-                {vitals && (
-                  <>
-                    <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.1)", margin: "0 2px" }} />
-                    {[
-                      { v: vitals.mouse_velocity.toFixed(0),              l: "px/s", warn: false },
-                      { v: vitals.key_rate.toFixed(0),                    l: "kpm",  warn: vitals.key_rate < 60 },
-                      { v: `${(vitals.idle_ratio * 100).toFixed(0)}%`,   l: "idle", warn: vitals.idle_ratio > 0.55 },
-                    ].map(x => (
-                      <div key={x.l} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "5px 12px", display: "flex", alignItems: "center", gap: 5 }}>
-                        <span style={{ fontSize: "0.78rem", fontWeight: 600, color: x.warn ? "#f59e0b" : "#fff", fontVariantNumeric: "tabular-nums" }}>{x.v}</span>
-                        <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.3)" }}>{x.l}</span>
-                      </div>
-                    ))}
-                  </>
-                )}
+                </div>
+                <div style={{ flex: 1 }}><FaceCam /></div>
               </div>
 
-              {/* Camera + Voice glass panels with panel headers */}
-              <div style={{
-                display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14,
-                ["--surface" as string]:   "transparent",
-                ["--surface-2" as string]: "rgba(255,255,255,0.03)",
-                ["--border" as string]:    "rgba(255,255,255,0.1)",
-                ["--muted" as string]:     "rgba(255,255,255,0.48)",
-                ["--muted-2" as string]:   "rgba(255,255,255,0.25)",
-                ["--text" as string]:      "#ffffff",
-                ["--amber" as string]:     "#f59e0b",
-              } as React.CSSProperties}>
-
-                {/* Camera glass card */}
-                <div style={{ background: "rgba(255,255,255,0.08)", backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)", border: "1px solid rgba(255,255,255,0.13)", borderRadius: 22, overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,0.3)" }}>
-                  {/* Panel header */}
-                  <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.04)" }}>
-                    <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#60a5fa,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Eye size={13} color="#fff" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "#fff" }}>Face Analysis</div>
-                      <div style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.38)" }}>Emotion · PERCLOS · Pose</div>
-                    </div>
+              {/* Voice Analysis */}
+              <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+                  <Mic size={22} color="#a78bfa" strokeWidth={1.5} />
+                  <div>
+                    <div style={{ fontSize: "1rem", fontWeight: 600, color: "#fff", letterSpacing: "-0.01em" }}>Voice Analysis</div>
+                    <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.32)", marginTop: 2 }}>Energy • Pitch • Jitter</div>
                   </div>
-                  <FaceCam />
                 </div>
+                <div style={{ flex: 1 }}><VoicePanel active={sessionActive} /></div>
+              </div>
+            </div>
 
-                {/* Voice glass card */}
-                <div style={{ background: "rgba(255,255,255,0.08)", backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)", border: "1px solid rgba(255,255,255,0.13)", borderRadius: 22, overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,0.3)" }}>
-                  {/* Panel header */}
-                  <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.04)" }}>
-                    <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#a78bfa,#ec4899)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Mic size={13} color="#fff" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "#fff" }}>Voice Analysis</div>
-                      <div style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.38)" }}>Energy · Pitch · Jitter</div>
-                    </div>
-                  </div>
-                  <VoicePanel active={sessionActive} />
+            {/* Bottom status bar */}
+            <div style={{
+              display: "flex", alignItems: "center",
+              padding: "13px 24px",
+              borderTop: "1px solid rgba(255,255,255,0.07)",
+              gap: 0,
+            }}>
+              {/* Live indicator */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, paddingRight: 24, borderRight: "1px solid rgba(255,255,255,0.07)", marginRight: 24, flexShrink: 0 }}>
+                <motion.div
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                  style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }}
+                />
+                <div>
+                  <div style={{ fontSize: "0.84rem", fontWeight: 600, color: "#fff" }}>Live Session</div>
+                  <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)" }}>Session in progress</div>
                 </div>
               </div>
 
-              {/* End session */}
-              <div style={{ display: "flex", justifyContent: "center", paddingTop: 4 }}>
-                <button onClick={stopSession} style={{
-                  background: "rgba(255,255,255,0.07)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12,
-                  padding: "9px 24px", fontSize: "0.8rem", color: "rgba(255,255,255,0.45)",
-                  cursor: "pointer", transition: "all 0.2s",
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}>
-                  End session
-                </button>
+              {/* Timer */}
+              <div style={{ paddingRight: 24, borderRight: "1px solid rgba(255,255,255,0.07)", marginRight: 24, flexShrink: 0 }}>
+                <div style={{ fontSize: "0.96rem", fontWeight: 600, color: "#fff", fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums" }}>{formatElapsed(elapsed)}</div>
+                <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)" }}>Session Duration</div>
               </div>
+
+              {/* Events */}
+              <div style={{ paddingRight: 24, borderRight: "1px solid rgba(255,255,255,0.07)", marginRight: 24, flexShrink: 0 }}>
+                <div style={{ fontSize: "0.96rem", fontWeight: 600, color: "rgba(255,255,255,0.35)", fontVariantNumeric: "tabular-nums" }}>–</div>
+                <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)" }}>Events Detected</div>
+              </div>
+
+              {/* Alerts */}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "0.96rem", fontWeight: 600, color: "rgba(255,255,255,0.35)", fontVariantNumeric: "tabular-nums" }}>–</div>
+                <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)" }}>Alerts Triggered</div>
+              </div>
+
+              {/* End Session */}
+              <button onClick={stopSession} style={{
+                padding: "8px 22px", borderRadius: 8,
+                fontSize: "0.82rem", fontWeight: 600,
+                background: "transparent",
+                border: "1px solid rgba(239,68,68,0.4)",
+                color: "#ef4444",
+                cursor: "pointer", transition: "all 0.2s", flexShrink: 0,
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.08)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.65)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; }}>
+                End Session
+              </button>
             </div>
           </motion.div>
         )}
