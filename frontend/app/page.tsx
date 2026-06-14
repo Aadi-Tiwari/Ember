@@ -1,14 +1,12 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Activity, Shield, Play, Eye, Mic, MessageSquare, X, ChevronRight,
-} from "lucide-react";
+import { Activity, Shield, Play, Eye, Mic, MessageSquare, X, ChevronRight } from "lucide-react";
 import LiveBadge from "../components/LiveBadge";
 import FaceCam from "../components/FaceCam";
 import VoicePanel from "../components/VoicePanel";
 import ChatPanel from "../components/ChatPanel";
-import Evaluate from "../components/Evaluate";
 import { useLiveStream } from "../hooks/useLiveStream";
 import { useActivityTracker } from "../hooks/useActivityTracker";
 
@@ -26,19 +24,38 @@ function scoreLabel(s: number) {
 }
 
 export default function Home() {
+  const router = useRouter();
+
   const [sessionActive, setSessionActive] = useState(false);
   const [chatOpen, setChatOpen]           = useState(false);
-  const [showEvaluate, setShowEvaluate]   = useState(false);
+  const sessionStartRef = useRef<number>(0);
 
   const live        = useLiveStream();
   const localVitals = useActivityTracker(sessionActive);
 
-  function startSession() { setSessionActive(true); live.connect(); }
-  function stopSession()  {
+  function startSession() {
+    sessionStartRef.current = Date.now();
+    setSessionActive(true);
+    live.connect();
+  }
+
+  function stopSession() {
     setSessionActive(false);
     live.disconnect();
     setChatOpen(false);
-    setShowEvaluate(false);
+  }
+
+  function goToEvaluate() {
+    // Save session snapshot to localStorage so the evaluate page can read it
+    const sessionData = {
+      score:            live.state.riskScore ?? 0,
+      readings:         live.state.readings,
+      attentionWeights: live.state.attentionWeights,
+      timestamp:        new Date().toISOString(),
+      duration:         Math.floor((Date.now() - sessionStartRef.current) / 1000),
+    };
+    localStorage.setItem("ember_session", JSON.stringify(sessionData));
+    router.push("/evaluate");
   }
 
   const vitals = live.state.vitals ?? (localVitals ? {
@@ -51,7 +68,7 @@ export default function Home() {
   const score    = live.state.riskScore ?? 0;
   const color    = scoreColor(score);
 
-  // Show score in browser tab title when user switches away
+  // Show live score in browser tab when user is on another tab
   useEffect(() => {
     if (sessionActive && hasScore) {
       document.title = `${score} ${scoreLabel(score)} - Ember`;
@@ -64,12 +81,11 @@ export default function Home() {
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
 
-      {/* ── Minimal header ── */}
+      {/* Header */}
       <header className="sticky top-0 z-40"
         style={{ background: "rgba(10,10,10,0.88)", backdropFilter: "blur(16px)", borderBottom: "1px solid var(--border)" }}>
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
 
-          {/* Logo */}
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center"
               style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.2)" }}>
@@ -79,7 +95,6 @@ export default function Home() {
             {sessionActive && <LiveBadge connected={live.state.connected} waiting={live.state.waiting} />}
           </div>
 
-          {/* Right: score + evaluate (when active) OR privacy note */}
           <div className="flex items-center gap-3">
             {sessionActive ? (
               <>
@@ -90,7 +105,7 @@ export default function Home() {
                   </div>
                 )}
                 <button
-                  onClick={() => hasScore && setShowEvaluate(true)}
+                  onClick={() => hasScore && goToEvaluate()}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium"
                   style={{
                     background: hasScore ? color + "15" : "var(--surface-2)",
@@ -115,7 +130,7 @@ export default function Home() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         <AnimatePresence mode="wait">
 
-          {/* ── IDLE ── */}
+          {/* IDLE */}
           {!sessionActive && (
             <motion.div key="idle"
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -142,9 +157,9 @@ export default function Home() {
 
               <div className="flex items-center gap-2 flex-wrap justify-center">
                 {[
-                  { icon: Eye,            label: "Face detection"  },
-                  { icon: Mic,            label: "Voice analysis"  },
-                  { icon: MessageSquare,  label: "AI wellness chat" },
+                  { icon: Eye,           label: "Face detection"   },
+                  { icon: Mic,           label: "Voice analysis"   },
+                  { icon: MessageSquare, label: "AI wellness chat" },
                 ].map(({ icon: Icon, label }) => (
                   <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs"
                     style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
@@ -155,7 +170,7 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* ── ACTIVE SESSION ── */}
+          {/* ACTIVE SESSION */}
           {sessionActive && (
             <motion.div key="active" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex flex-col gap-5">
@@ -192,7 +207,7 @@ export default function Home() {
               {/* End session */}
               <div className="flex justify-center pt-1 pb-4">
                 <button onClick={stopSession}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs cursor-pointer"
+                  className="text-xs cursor-pointer px-4 py-2 rounded-xl"
                   style={{ color: "var(--muted)", border: "1px solid var(--border)" }}
                   onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
                   onMouseLeave={e => (e.currentTarget.style.color = "var(--muted)")}>
@@ -205,28 +220,27 @@ export default function Home() {
         </AnimatePresence>
       </main>
 
-      {/* ── Floating chat button (bottom right) ── */}
+      {/* Floating chat button */}
       {sessionActive && (
         <motion.button
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.4, type: "spring", stiffness: 260, damping: 20 }}
           onClick={() => setChatOpen(v => !v)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl cursor-pointer"
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center cursor-pointer"
           style={{
-            background: chatOpen ? "var(--surface-2)" : "var(--amber)",
-            border:     `2px solid ${chatOpen ? "var(--border)" : "var(--amber)"}`,
-            boxShadow:  chatOpen ? "none" : "0 8px 32px rgba(245,158,11,0.35)",
+            background:  chatOpen ? "var(--surface-2)" : "var(--amber)",
+            border:      `2px solid ${chatOpen ? "var(--border)" : "var(--amber)"}`,
+            boxShadow:   chatOpen ? "none" : "0 8px 32px rgba(245,158,11,0.35)",
           }}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.94 }}>
+          whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }}>
           {chatOpen
             ? <X size={20} color="var(--muted)" />
             : <MessageSquare size={20} color="#000" />}
         </motion.button>
       )}
 
-      {/* ── Chat side panel (ElevenLabs style) ── */}
+      {/* Chat side panel */}
       <AnimatePresence>
         {chatOpen && (
           <motion.div
@@ -235,26 +249,17 @@ export default function Home() {
             exit={{ x: "100%", opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="fixed top-0 right-0 bottom-0 z-40 flex flex-col"
-            style={{
-              width: 380,
-              background: "var(--surface)",
-              borderLeft: "1px solid var(--border)",
-              boxShadow: "-8px 0 40px rgba(0,0,0,0.4)",
-            }}>
+            style={{ width: 380, background: "var(--surface)", borderLeft: "1px solid var(--border)", boxShadow: "-8px 0 40px rgba(0,0,0,0.4)" }}>
 
-            {/* Panel header */}
             <div className="flex items-center gap-2.5 px-5 py-4"
               style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
               <div className="w-7 h-7 rounded-full flex items-center justify-center"
-                style={{ background: "var(--amber)", fontSize: 11, fontWeight: 700, color: "#000" }}>
-                E
-              </div>
+                style={{ background: "var(--amber)", fontSize: 11, fontWeight: 700, color: "#000" }}>E</div>
               <div className="flex flex-col">
                 <span className="text-sm font-semibold">Ember AI</span>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>Wellness companion</span>
               </div>
-              <button onClick={() => setChatOpen(false)}
-                className="ml-auto p-1.5 rounded-lg cursor-pointer"
+              <button onClick={() => setChatOpen(false)} className="ml-auto p-1.5 rounded-lg cursor-pointer"
                 style={{ color: "var(--muted)" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
                 onMouseLeave={e => (e.currentTarget.style.color = "var(--muted)")}>
@@ -262,23 +267,12 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Chat fills the rest */}
             <div className="flex-1 overflow-hidden">
               <ChatPanel active={chatOpen} />
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Evaluate modal */}
-      <Evaluate
-        open={showEvaluate}
-        onClose={() => setShowEvaluate(false)}
-        onEndSession={() => { setShowEvaluate(false); stopSession(); }}
-        score={score}
-        readings={live.state.readings}
-        attentionWeights={live.state.attentionWeights}
-      />
     </div>
   );
 }
