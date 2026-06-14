@@ -104,7 +104,7 @@ export default function FaceCam({ onEmotion }: Props) {
         },
         outputFaceBlendshapes: true,
         outputFacialTransformationMatrixes: true,
-        runningMode: "LIVE_STREAM",
+        runningMode: "VIDEO",
         numFaces: 1,
         minFaceDetectionConfidence: 0.4,
         minFacePresenceConfidence: 0.4,
@@ -154,14 +154,8 @@ export default function FaceCam({ onEmotion }: Props) {
 
     const { landmarker, FaceLandmarker } = ref;
     let results: any;
-    // MediaPipe calls console.error internally before throwing on bad frames.
-    // Suppress it during the call so Next.js dev overlay stays clean.
-    // Our catch still handles the actual throw.
-    const _ce = console.error;
-    (console as any).error = () => {};
     try { results = landmarker.detectForVideo(v, ts); }
     catch { return; }
-    finally { (console as any).error = _ce; }
 
     if (c.width !== v.clientWidth || c.height !== v.clientHeight) {
       c.width = v.clientWidth || 640; c.height = v.clientHeight || 480;
