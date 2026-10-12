@@ -1,12 +1,15 @@
 import asyncio
 import json
+import math
 import os
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Literal
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from engine.event_store import store, Event
 from db.database import init_db
@@ -24,7 +27,7 @@ GROQ_KEY    = os.getenv("GROQ_API_KEY", "")
 OPENAI_KEY  = os.getenv("OPENAI_API_KEY", "")
 AI_KEY      = GROQ_KEY or OPENAI_KEY
 AI_BASE_URL = "https://api.groq.com/openai/v1" if GROQ_KEY else "https://api.openai.com/v1"
-AI_MODEL    = "llama-3.3-70b-versatile" if GROQ_KEY else "gpt-4o-mini"
+AI_MODEL    = "openai/gpt-oss-120b" if GROQ_KEY else "gpt-4o-mini"
 
 AI_SYSTEM = """You are Ember, a compassionate mental wellness companion inside Ember - a burnout early detection app.
 
@@ -56,9 +59,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ember", lifespan=lifespan)
 
+from auth.router import router as auth_router
+
+app.include_router(auth_router)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -66,12 +73,36 @@ app.add_middleware(
 
 @app.post("/ingest")
 async def ingest(event: dict):
+    sensor_fields = {
+        "vitals": {"mouse_velocity_px_s": (0, None), "key_rate_per_min": (0, None), "idle_ratio": (0, 1)},
+        "emotion": {**{key: (0, 1) for key in ("happy", "sad", "angry", "fearful", "disgusted", "neutral", "eye_openness", "perclos")}, "head_pitch": (-180, 180)},
+        "voice": {**{key: (0, 1) for key in ("energy", "cadence", "pitch_variation", "jitter", "spectral_centroid")}, "pitch_hz": (-1, None)},
+        "chat": {},
+    }
+    event_type = event.get("type")
+    if not isinstance(event_type, str) or event_type not in sensor_fields:
+        raise HTTPException(422, "Unsupported event type")
+    for field, (minimum, maximum) in sensor_fields[event_type].items():
+        if field not in event:
+            continue
+        value = event[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise HTTPException(422, f"Invalid sensor value: {field}")
+        try:
+            finite = math.isfinite(value)
+        except OverflowError:
+            finite = False
+        if (not finite
+                or (minimum is not None and value < minimum) or (maximum is not None and value > maximum)):
+            raise HTTPException(422, f"Invalid sensor value: {field}")
+    if event_type == "chat" and not isinstance(event.get("text", ""), str):
+        raise HTTPException(422, "Chat text must be a string")
     ts_raw = event.get("timestamp")
     try:
         ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")) if ts_raw else datetime.now(timezone.utc)
     except ValueError:
         ts = datetime.now(timezone.utc)
-    store.add(Event(type=event.get("type", "unknown"), timestamp=ts, data=event))
+    store.add(Event(type=event_type, timestamp=ts, data=event))
     return {"ok": True}
 
 
@@ -149,28 +180,37 @@ async def _push(ws: WebSocket):
     }))
 
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class ChatBody(BaseModel):
+    messages: list[ChatMessage] = Field(default_factory=list)
+    last_user_message: str = ""
+
+
 @app.post("/api/chat")
-async def ai_chat(body: dict):
+async def ai_chat(body: ChatBody):
     """AI wellness chat - works with Groq (free) or OpenAI."""
     if not AI_KEY:
         return {
-            "reply": "AI chat needs an API key. Add GROQ_API_KEY to your .env file (free at console.groq.com).",
+            "reply": "Chat is unavailable right now. You can continue using the activity dashboard.",
             "error": True,
         }
 
-    messages = body.get("messages", [])
+    messages = [message.model_dump() for message in body.messages]
     # Seed with a system-level greeting trigger if conversation is empty
     api_messages = messages if messages else [{"role": "user", "content": "begin"}]
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=AI_KEY, base_url=AI_BASE_URL)
-
-        response = client.chat.completions.create(
-            model=AI_MODEL,
-            max_tokens=400,
-            messages=[{"role": "system", "content": AI_SYSTEM}] + api_messages,
-        )
+        from openai import AsyncOpenAI
+        async with AsyncOpenAI(api_key=AI_KEY, base_url=AI_BASE_URL, timeout=20) as client:
+            response = await client.chat.completions.create(
+                model=AI_MODEL,
+                max_completion_tokens=2048,
+                messages=[{"role": "system", "content": AI_SYSTEM}] + api_messages,
+            )
         raw = response.choices[0].message.content or ""
 
         # Strip <assessment> block before sending to user
@@ -184,8 +224,8 @@ async def ai_chat(body: dict):
                     type="chat",
                     timestamp=datetime.now(timezone.utc),
                     data={
-                        "text":             body.get("last_user_message", ""),
-                        "ai_score":         int(assessment.get("score", 50)),
+                        "text":             body.last_user_message,
+                        "ai_score":         max(0, min(100, int(assessment.get("score", 50)))),
                         "finding":          assessment.get("finding", ""),
                         "dominant_emotion": assessment.get("dominant_emotion", ""),
                     },
@@ -196,7 +236,7 @@ async def ai_chat(body: dict):
         return {"reply": reply or "I'm here for you. How are you feeling?"}
 
     except Exception:
-        return {"reply": "Could not reach the AI. Check your API key and internet connection.", "error": True}
+        return {"reply": "Chat could not respond. Please try again shortly.", "error": True}
 
 
 @app.get("/health")

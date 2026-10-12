@@ -6,7 +6,7 @@ export type HistoryEntry = {
   daysToThreshold: number | null;
 };
 
-const KEY = "pulsecheck_history";
+const KEY = "ember_history";
 const MAX = 5;
 
 export function saveRun(entry: Omit<HistoryEntry, "id">): void {

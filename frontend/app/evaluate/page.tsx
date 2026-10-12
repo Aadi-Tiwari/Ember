@@ -64,12 +64,12 @@ function interpret(score: number, readings: SensorReading[]): string {
   const em = readings.find(r => r.label === "Emotion");
   const vo = readings.find(r => r.label === "Voice");
   const ac = readings.find(r => r.label === "Activity");
-  if (score < 30) return "All sensors look healthy. Facial expressions, voice patterns, and movement are within normal range.";
+  if (score < 30) return "The combined prototype score is low.";
   if (score < 60) {
     const flags = [em?.score && em.score > 40 ? "mild facial stress" : null, vo?.score && vo.score > 40 ? "reduced vocal energy" : null, ac?.score && ac.score > 40 ? "lower activity" : null].filter(Boolean);
     return flags.length ? `Mild signals detected - ${flags.join(" and ")}. Consider a short break.` : "Some mild stress signals present. A short break could help.";
   }
-  if (score < 80) return "Multiple burnout signals active. Take a real break - not just a few minutes.";
+  if (score < 80) return "The combined prototype score is elevated. Consider taking a break.";
   return "Critical signals detected. Step away, hydrate, and consider talking to someone you trust.";
 }
 
@@ -207,6 +207,7 @@ export default function EvaluatePage() {
               <div>
                 <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.38), marginBottom: 8 }}>Overall Burnout Risk</p>
                 <p style={{ fontSize: "1rem", lineHeight: 1.65, color: W(0.7) }}>{summary}</p>
+                <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: W(0.5) }}>Only sensors with readings are included; missing sensors are not assessed.</p>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <div style={{ ...GR, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>

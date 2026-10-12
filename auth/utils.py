@@ -1,10 +1,11 @@
 import hashlib
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
 
-SECRET = "pulsecheck-mh3-secret-2026-do-not-ship"
+SECRET = os.environ.get("EMBER_JWT_SECRET") or secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
 TOKEN_DAYS = 7
 
