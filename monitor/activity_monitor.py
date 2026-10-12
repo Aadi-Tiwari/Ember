@@ -2,7 +2,7 @@
 Activity Monitor - run this in a separate terminal.
 
 Tracks mouse velocity, typing cadence, and idle time using pynput.
-Sends vitals to the PulseCheck backend every 10 seconds.
+Sends vitals to the Ember backend every 10 seconds.
 No keystrokes are recorded - only timing/frequency.
 
 Usage:
@@ -102,8 +102,8 @@ def main():
     mouse_listener.start()
     kb_listener.start()
 
-    print(f"[PulseCheck] Activity monitor running. Sending to {API_URL} every {SEND_INTERVAL}s")
-    print("[PulseCheck] Move your mouse or type to generate data. Ctrl+C to stop.\n")
+    print(f"[Ember] Activity monitor running. Sending to {API_URL} every {SEND_INTERVAL}s")
+    print("[Ember] Move your mouse or type to generate data. Ctrl+C to stop.\n")
 
     while True:
         time.sleep(SEND_INTERVAL)

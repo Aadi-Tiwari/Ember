@@ -69,7 +69,7 @@ export default function LoginPage() {
         >
           <Activity size={20} color="var(--amber)" />
         </div>
-        <span className="text-lg font-bold tracking-tight">PulseCheck</span>
+        <span className="text-lg font-bold tracking-tight">Ember</span>
       </motion.div>
 
       <motion.div
@@ -187,7 +187,7 @@ export default function LoginPage() {
 
         <div className="mt-8 flex items-center gap-2 justify-center" style={{ color: "var(--muted)" }}>
           <Shield size={12} />
-          <span className="text-xs">Behavioral data only. No message content is read.</span>
+          <span className="text-xs">Optional AI chat sends your messages to the configured provider.</span>
         </div>
       </motion.div>
     </div>

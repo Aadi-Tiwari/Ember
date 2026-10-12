@@ -9,3 +9,8 @@ node_modules/
 *.log
 .DS_Store
 uploads/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+.pytest_cache/

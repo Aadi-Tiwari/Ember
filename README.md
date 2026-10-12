@@ -1,71 +1,64 @@
-# PulseCheck
+# Ember
 
-Early burnout detection through behavioral pattern analysis. No messages read. No words processed.
+A local wellness dashboard that brings activity, emotion, voice, and optional chat signals into one live view.
 
-## What It Does
+The FastAPI service collects events and streams summaries to a Next.js interface. Optional desktop and Discord collectors feed the same event store. Scores are experimental indicators, not validated diagnoses or emergency monitoring.
 
-PulseCheck analyzes the *shape* of your digital communication - when you message, how often, how fast you reply, how many people you talk to, and how much you write - to detect early signs of burnout before you realize it yourself.
+## Run locally
 
-Six independent sensors each analyze one behavioral dimension. When multiple sensors converge on the same pattern, a risk score is generated. Think of it as a check engine light for your mental state.
+Use Python 3.11 for the pinned backend dependencies and Node.js 22 for the interface.
 
-## Architecture
-
-```
-Discord/Slack Export (JSON)
-         |
-    [Parser] - strips all content, keeps only metadata
-         |
-    [Analysis Engine] - asyncio.gather() parallel dispatch
-   /   |   |   |   \
-[S1] [S2] [S3] [S4] [S5]   <- all sensors run simultaneously
-  \   |   |   |   /
-  [Signal Fusion] - MiniLM embedding-based consensus
-         |
-    [Anomaly Filter] - statistical outlier removal
-         |
-  [Risk Score 0-100]
-         |
-  [WebSocket Stream] -> Frontend Dashboard
+```sh
+python -m venv .venv
 ```
 
-## Sensors
+Activate `.venv` (`.venv\Scripts\Activate.ps1` in PowerShell or `source .venv/bin/activate` on macOS/Linux), then:
 
-| Sensor | What It Measures |
-|---|---|
-| Timing | When you message - detects sleep schedule drift |
-| Frequency | How often - detects sustained activity dropoff |
-| Latency | How fast you reply - detects social withdrawal |
-| Social Graph | How many people - detects contracting social circle |
-| Volume | How much you write - detects communication energy decline |
-| Sentiment (optional) | Voluntary text input - VADER tone analysis |
+```sh
+python -m pip install -r requirements-dev.txt
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+```
 
-## Privacy
+In another terminal:
 
-- Message content is stripped immediately on upload
-- Only timestamps, character counts, and anonymized channel/author hashes are processed
-- No data is stored server-side
-- Optional sentiment analysis only runs on text the user explicitly provides
-
-## Setup
-
-```bash
-# Backend
-pip install -r requirements.txt
-uvicorn main:app --reload
-
-# Frontend (in /frontend)
-npm install
+```sh
+cd frontend
+npm ci
 npm run dev
 ```
 
-## Demo Mode
+Open <http://localhost:3000>. The backend health endpoint is <http://127.0.0.1:8000/health>. Registration and login use a local SQLite database created at startup.
 
-Hit `GET /demo/healthy` or `GET /demo/crisis` for pre-loaded scenarios. The frontend has a one-click demo button that uses these endpoints.
+For optional chat, copy `.env.example` to `.env` and configure `GROQ_API_KEY` or `OPENAI_API_KEY`. Groq takes priority when both are set. Set `EMBER_JWT_SECRET` to a private random value to preserve sessions across restarts. Without it, the server generates a temporary signing secret and restarting invalidates existing sessions.
 
-## Tech Stack
+The frontend defaults to `http://localhost:8000`. Override `NEXT_PUBLIC_API_URL` in `frontend/.env.local` if needed. The backend permits the local frontend origins listed in `main.py`.
 
-- Backend: Python + FastAPI + asyncio
-- Signal Fusion: sentence-transformers (MiniLM-L6-v2) + scikit-learn cosine similarity
-- Sentiment: VADER
-- Frontend: Next.js + Tailwind CSS + Framer Motion
-- Deploy: Vercel
+## Data and deployment limits
+
+This is a single-user local prototype. Login does not isolate the shared event stream, and the ingest and WebSocket endpoints are not protected by per-user authorization. Bind the backend to loopback; multi-user hosting requires separate authorization and event storage work.
+
+Chat text is sent to the configured language provider. Chat events can contain the user's text in memory. Account records persist in local SQLite, and the frontend keeps history in browser storage. Do not describe the application as metadata-only or as storing nothing. Collector behavior is visible in `monitor/`; review it before enabling collection.
+
+## Source map
+
+- `main.py`: ingestion, live stream, health, and optional chat.
+- `auth/` and `db/`: account routes, signed sessions, and SQLite access.
+- `engine/`: shared events and signal summaries.
+- `monitor/`: optional collectors.
+- `frontend/`: dashboard, evaluation, and login views.
+
+## Checks
+
+From the root with the virtual environment active:
+
+```sh
+python -m pytest -q
+```
+
+From `frontend/`:
+
+```sh
+npm run build
+```
+
+The API tests use a temporary database and mock the chat provider. They cover account login, request validation, assessment bounds, and CORS. They do not validate the wellness scores or exercise live collectors and paid providers.
