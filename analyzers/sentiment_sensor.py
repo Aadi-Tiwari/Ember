@@ -17,9 +17,9 @@ def run(data) -> SensorReading:
     """
     Scores chat/text sentiment.
     Accepts either a raw string (VADER) or a dict with an AI-assessed score
-    (when the Claude chat endpoint has already evaluated the conversation).
+    (when the chat endpoint has already evaluated the conversation).
     """
-    # Claude AI assessment path (higher confidence than VADER)
+    # Preserve the assessment attached to this conversation.
     if isinstance(data, dict):
         if "ai_score" in data:
             score   = int(data["ai_score"])

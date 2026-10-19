@@ -35,6 +35,8 @@ The frontend defaults to `http://localhost:8000`. Override `NEXT_PUBLIC_API_URL`
 
 ## Data and deployment limits
 
+The live stream preserves a chat assessment when one is available and uses local sentiment analysis for plain chat events. Combining multiple signals loads the sentence-embedding model on first use and may download its assets. A single active signal does not require that model download.
+
 This is a single-user local prototype. Login does not isolate the shared event stream, and the ingest and WebSocket endpoints are not protected by per-user authorization. Bind the backend to loopback; multi-user hosting requires separate authorization and event storage work.
 
 Chat text is sent to the configured language provider. Chat events can contain the user's text in memory. Account records persist in local SQLite, and the frontend keeps history in browser storage. Do not describe the application as metadata-only or as storing nothing. Collector behavior is visible in `monitor/`; review it before enabling collection.
@@ -62,3 +64,7 @@ npm run build
 ```
 
 The API tests use a temporary database and mock the chat provider. They cover account login, request validation, assessment bounds, and CORS. They do not validate the wellness scores or exercise live collectors and paid providers.
+
+## License
+
+Original project source is available under the [MIT License](LICENSE). Third-party dependencies, model weights, fonts, documents, and datasets retain their own licenses. This license does not grant rights to third-party assets.

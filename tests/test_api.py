@@ -1,12 +1,15 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+import asyncio
+import json
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
 import main
 from db import database
-from engine.event_store import EventStore
+from engine.event_store import Event, EventStore
 
 
 @pytest.fixture
@@ -85,4 +88,23 @@ def test_invalid_event_cannot_replace_the_latest_reading(client, event):
 
 def test_nonfinite_sensor_value_is_rejected(client):
     response = client.post("/ingest", content='{"type":"vitals","idle_ratio":NaN}', headers={"Content-Type": "application/json"})
+    assert response.status_code == 422
+
+
+def test_live_chat_preserves_the_assessment(client):
+    main.store.add(Event(type="chat", timestamp=datetime.now(timezone.utc), data={
+        "text": "I am fine", "ai_score": 84, "finding": "Reported sustained exhaustion", "dominant_emotion": "tired",
+    }))
+    socket = SimpleNamespace(send_text=AsyncMock())
+    asyncio.run(main._push(socket))
+    update = json.loads(socket.send_text.call_args.args[0])
+    assert update["readings"][0]["score"] == 84
+    assert "Reported sustained exhaustion" in update["readings"][0]["finding"]
+    assert update["risk_score"] == 84
+    assert update["attention_weights"][0]["pct"] == 100
+
+
+@pytest.mark.parametrize("fields", [{"ai_score": "bad"}, {"ai_score": 101}, {"finding": []}, {"dominant_emotion": {}}])
+def test_invalid_chat_assessment_is_rejected(client, fields):
+    response = client.post("/ingest", json={"type": "chat", "text": "Hello", **fields})
     assert response.status_code == 422

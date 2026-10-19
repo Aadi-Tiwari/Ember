@@ -77,7 +77,7 @@ async def ingest(event: dict):
         "vitals": {"mouse_velocity_px_s": (0, None), "key_rate_per_min": (0, None), "idle_ratio": (0, 1)},
         "emotion": {**{key: (0, 1) for key in ("happy", "sad", "angry", "fearful", "disgusted", "neutral", "eye_openness", "perclos")}, "head_pitch": (-180, 180)},
         "voice": {**{key: (0, 1) for key in ("energy", "cadence", "pitch_variation", "jitter", "spectral_centroid")}, "pitch_hz": (-1, None)},
-        "chat": {},
+        "chat": {"ai_score": (0, 100)},
     }
     event_type = event.get("type")
     if not isinstance(event_type, str) or event_type not in sensor_fields:
@@ -95,8 +95,10 @@ async def ingest(event: dict):
         if (not finite
                 or (minimum is not None and value < minimum) or (maximum is not None and value > maximum)):
             raise HTTPException(422, f"Invalid sensor value: {field}")
-    if event_type == "chat" and not isinstance(event.get("text", ""), str):
-        raise HTTPException(422, "Chat text must be a string")
+    if event_type == "chat":
+        for field in ("text", "finding", "dominant_emotion"):
+            if not isinstance(event.get(field, ""), str):
+                raise HTTPException(422, f"Chat {field} must be a string")
     ts_raw = event.get("timestamp")
     try:
         ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")) if ts_raw else datetime.now(timezone.utc)
@@ -142,7 +144,7 @@ async def _push(ws: WebSocket):
     chat = store.get_chat()
     if chat and chat.get("text"):
         from analyzers.sentiment_sensor import run as sentiment_run
-        readings.append(sentiment_run(chat["text"]))
+        readings.append(sentiment_run(chat))
 
     if not readings:
         return

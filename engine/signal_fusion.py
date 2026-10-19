@@ -1,8 +1,7 @@
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-_model = SentenceTransformer("all-MiniLM-L6-v2")
+_model = None
 
 
 def fuse(readings: list) -> tuple[int, list[dict]]:
@@ -21,6 +20,11 @@ def fuse(readings: list) -> tuple[int, list[dict]]:
 
     if len(active) == 1:
         return active[0].score, [{"label": active[0].label, "pct": 100, "zscore": getattr(active[0], "zscore", 0.0)}]
+
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
 
     findings = [r.finding for r in active]
     embeddings = _model.encode(findings)
