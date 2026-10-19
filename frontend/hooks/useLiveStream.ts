@@ -1,5 +1,6 @@
 "use client";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { BASE } from "../lib/api";
 
 export type SensorReading = { label: string; score: number; finding: string; confidence: number; zscore?: number };
 export type AttentionWeight = { label: string; pct: number; zscore: number };
@@ -10,6 +11,7 @@ type Sources = { activity: boolean; emotion: boolean; voice: boolean };
 export type LiveState = {
   connected: boolean;
   waiting: boolean;
+  error: string | null;
   readings: SensorReading[];
   riskScore: number | null;
   vitals: Vitals | null;
@@ -17,11 +19,12 @@ export type LiveState = {
   attentionWeights: AttentionWeight[];
 };
 
-const WS_URL = process.env.NEXT_PUBLIC_API_WS_LIVE ?? "ws://localhost:8000/ws/live";
+const WS_URL = process.env.NEXT_PUBLIC_API_WS_LIVE ?? `${BASE.replace(/^http/, "ws")}/ws/live`;
 
 const EMPTY: LiveState = {
   connected: false,
   waiting: false,
+  error: null,
   readings: [],
   riskScore: null,
   vitals: null,
@@ -35,19 +38,29 @@ export function useLiveStream() {
 
   const connect = useCallback(() => {
     wsRef.current?.close();
-    const ws = new WebSocket(WS_URL);
+    setState(EMPTY);
+    let ws: WebSocket;
+    try { ws = new WebSocket(WS_URL); }
+    catch {
+      setState({ ...EMPTY, error: "The live connection could not start. Run the local backend and frontend together, or configure a compatible secure backend." });
+      return;
+    }
     wsRef.current = ws;
 
-    ws.onopen = () => setState(prev => ({ ...prev, connected: true, waiting: true }));
+    ws.onopen = () => { if (wsRef.current === ws) setState(prev => ({ ...prev, connected: true, waiting: true, error: null })); };
 
     ws.onmessage = (evt) => {
-      const msg = JSON.parse(evt.data);
+      if (wsRef.current !== ws) return;
+      let msg;
+      try { msg = JSON.parse(evt.data); }
+      catch { setState(prev => ({ ...prev, error: "The backend sent an unreadable update." })); return; }
       if (msg.type === "waiting") {
-        setState(prev => ({ ...prev, waiting: true }));
+        setState(prev => ({ ...prev, waiting: true, riskScore: null, readings: [] }));
       } else if (msg.type === "update") {
         setState({
           connected: true,
           waiting: false,
+          error: null,
           readings: msg.readings ?? [],
           riskScore: msg.risk_score ?? null,
           vitals: msg.vitals ?? null,
@@ -57,8 +70,11 @@ export function useLiveStream() {
       }
     };
 
-    ws.onclose = () => setState(prev => ({ ...prev, connected: false }));
+    ws.onerror = () => { if (wsRef.current === ws) setState(prev => ({ ...prev, error: "Cannot reach the live backend. Start it using the README instructions." })); };
+    ws.onclose = () => { if (wsRef.current === ws) setState(prev => ({ ...EMPTY, error: prev.error || "The live backend disconnected. End this session and reconnect." })); };
   }, []);
+
+  useEffect(() => () => { wsRef.current?.close(); wsRef.current = null; }, []);
 
   const disconnect = useCallback(() => {
     wsRef.current?.close();

@@ -31,7 +31,13 @@ Open <http://localhost:3000>. The backend health endpoint is <http://127.0.0.1:8
 
 For optional chat, copy `.env.example` to `.env` and configure `GROQ_API_KEY` or `OPENAI_API_KEY`. Groq takes priority when both are set. Set `EMBER_JWT_SECRET` to a private random value to preserve sessions across restarts. Without it, the server generates a temporary signing secret and restarting invalidates existing sessions.
 
-The frontend defaults to `http://localhost:8000`. Override `NEXT_PUBLIC_API_URL` in `frontend/.env.local` if needed. The backend permits the local frontend origins listed in `main.py`.
+The frontend defaults to `http://localhost:8000`. Override `NEXT_PUBLIC_API_URL` in `frontend/.env.local` if needed. The live WebSocket URL follows that API URL; use `NEXT_PUBLIC_API_WS_LIVE` only for a separate socket endpoint. The backend permits the local frontend origins listed in `main.py`.
+
+## Pages
+
+The Next.js frontend includes the landing and session page at `/`, local account access at `/login`, and saved-session evaluation at `/evaluate`. Evaluation requires an actual recorded session. Connection failures are shown in the session view; an unavailable backend must not look like a live assessment.
+
+For Vercel frontend builds, set the project root to `frontend`. A frontend deployment alone does not provide the Python service. The root FastAPI application is intended to run locally and its ML dependencies exceed the serverless bundle limit. Use the local setup above; do not treat a successful frontend deployment as proof of a working hosted backend.
 
 ## Data and deployment limits
 

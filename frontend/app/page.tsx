@@ -13,7 +13,7 @@ import { useActivityTracker } from "../hooks/useActivityTracker";
 const VIDEO_SRC =
   "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/bg-hero-0BnFGdr81Ifnj3WbBZoNt1KE4D5DMT.mp4";
 
-const WORDS = ["detected", "prevented", "understood", "addressed"];
+const WORDS = ["observed", "explored", "reviewed", "recorded"];
 const BLUR_GRAD = ["#f59e0b", "#fb923c", "#fbbf24", "#f97316", "#f59e0b"];
 
 // ── BlurWord ───────────────────────────────────────────────────────────────
@@ -79,8 +79,8 @@ function scoreColor(s: number) {
   if (s < 80) return "#f97316"; return "#ef4444";
 }
 function scoreLabel(s: number) {
-  if (s < 30) return "Low Risk"; if (s < 60) return "Moderate";
-  if (s < 80) return "High Risk"; return "Critical";
+  if (s < 30) return "Lower score"; if (s < 60) return "Middle range";
+  if (s < 80) return "Higher score"; return "Elevated score";
 }
 
 // ── Glass style helpers ────────────────────────────────────────────────────
@@ -222,7 +222,7 @@ export default function Home() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.8rem", color: "rgba(255,255,255,0.35)" }}>
-                  <Shield size={10} /> On-device only
+                  <Shield size={10} /> Local workspace
                 </span>
                 <button onClick={startSession} style={{
                   display: "flex", alignItems: "center", gap: 7,
@@ -251,7 +251,7 @@ export default function Home() {
                   color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em", textTransform: "uppercase",
                 }}>
                   <span style={{ display: "inline-block", width: 24, height: 1, background: "rgba(255,255,255,0.2)" }} />
-                  Real-time burnout detection
+                  Experimental wellness signals
                   <span style={{ display: "inline-block", width: 24, height: 1, background: "rgba(255,255,255,0.2)" }} />
                 </span>
               </div>
@@ -262,12 +262,12 @@ export default function Home() {
                 lineHeight: 1.0, color: "#fff", letterSpacing: "-0.01em",
                 ...fadeUp(150),
               }}>
-                <span style={{ display: "block", fontStyle: "normal" }}>Burnout,</span>
+                <span style={{ display: "block", fontStyle: "normal" }}>Work patterns,</span>
                 <span style={{ display: "block" }}>
                   <span style={{ fontStyle: "italic" }}>
                     <BlurWord word={WORDS[wordIndex]} trigger={wordIndex} />
                   </span>
-                  <span style={{ fontStyle: "normal", color: "rgba(255,255,255,0.82)" }}>{" early."}</span>
+                  <span style={{ fontStyle: "normal", color: "rgba(255,255,255,0.82)" }}>{" locally."}</span>
                 </span>
               </h1>
 
@@ -277,7 +277,7 @@ export default function Home() {
                   color: "rgba(255,255,255,0.45)",
                   lineHeight: 1.75,
                 }}>
-                  A check engine light for your mental state. Ember watches how you work, never what you say.
+                  Explore patterns in activity, facial expression, and voice. Scores are experimental and cannot diagnose burnout.
                 </p>
                 <div style={{ marginTop: 26, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                   <button onClick={startSession} style={{
@@ -293,7 +293,7 @@ export default function Home() {
                     <Play size={13} fill="currentColor" /> Start Session
                   </button>
                   <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.22)", letterSpacing: "0.05em" }}>
-                    On-device · Zero data sent · Works passively
+                    Local backend required. Optional AI chat sends text to your provider.
                   </span>
                 </div>
               </div>
@@ -314,7 +314,7 @@ export default function Home() {
                 />
                 <text x={-3300} style={{ fontSize: "14px", fill: "rgba(255,255,255,0.2)", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace" } as React.CSSProperties}>
                   <textPath href="#ember-curve-signals">
-                    3:47am message · 89% idle time · reply latency +340% · social graph -4 contacts · typing rate 14wpm · missed standup day 3 · mouse velocity 12px/s · key rate below baseline · 3:47am message · 89% idle time · reply latency +340% · social graph shrinking · typing 14wpm ·
+                    Activity events · Voice features · Facial expression · Optional chat · Local event store · Session history ·
                   </textPath>
                   <animate attributeName="x" dur="38s" values="-3300; 0" repeatCount="indefinite" />
                 </text>
@@ -328,7 +328,7 @@ export default function Home() {
                 />
                 <text x={-4500} style={{ fontSize: "14px", fill: "rgba(245,158,11,0.72)", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", fontWeight: 600 } as React.CSSProperties}>
                   <textPath href="#ember-curve-insight">
-                    Sleep drift: 4.2 nights detected · Social withdrawal: significant · Cognitive fatigue: elevated · Burnout risk score: 78 — High Risk · Early intervention recommended · Sleep drift: 4.2 nights · Social withdrawal: significant · Cognitive fatigue: elevated ·
+                    Experimental signals · Review the inputs · Understand the limits · No diagnostic claims · Optional provider inference ·
                   </textPath>
                   <animate attributeName="x" dur="60s" values="-4500; 0" repeatCount="indefinite" />
                 </text>
@@ -346,10 +346,10 @@ export default function Home() {
                 borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20,
               }}>
                 {[
-                  { value: "3",      label: "active sensors"     },
-                  { value: "0 data", label: "sent to servers"    },
-                  { value: "<50ms",  label: "detection speed"    },
-                  { value: "5+",     label: "biometric signals"  },
+                  { value: "Activity", label: "local event signals" },
+                  { value: "Optional", label: "camera and voice" },
+                  { value: "Local", label: "backend workspace" },
+                  { value: "Prototype", label: "unvalidated scores" },
                 ].map(s => (
                   <div key={s.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                     <span className="font-garamond" style={{ fontStyle: "italic", fontWeight: 500, color: "#fff", fontSize: "clamp(1.3rem, 2.6vw, 2.2rem)" }}>{s.value}</span>
@@ -368,9 +368,10 @@ export default function Home() {
             transition={{ duration: 0.5 }}
             style={{ position: "relative", zIndex: 10, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
+            {live.state.error && <p role="alert" style={{ margin: "16px 24px", padding: 12, color: "#fbbf24", border: "1px solid #fbbf2460", borderRadius: 8 }}>{live.state.error} <a href="https://github.com/Aadi-Tiwari/Ember#run-locally" style={{ textDecoration: "underline" }}>Setup guide</a></p>}
             {/* Evaluate button - top right */}
             <div style={{ display: "flex", justifyContent: "flex-end", padding: "14px 24px 0" }}>
-              <button onClick={() => hasScore && goToEvaluate()} style={{
+              <button disabled={!hasScore} onClick={() => hasScore && goToEvaluate()} style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "7px 20px", borderRadius: 8,
                 fontSize: "0.84rem", fontWeight: 600,
@@ -405,10 +406,10 @@ export default function Home() {
                   <text x={36} y={43} textAnchor="middle" fill="#fff" fontSize={19} fontWeight={700}>{hasScore ? score : "–"}</text>
                 </svg>
                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <span style={{ fontSize: "0.58rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.12em", textTransform: "uppercase" }}>Risk Score</span>
-                  <span style={{ fontSize: "1.1rem", fontWeight: 700, color: hasScore ? color : "rgba(255,255,255,0.4)", lineHeight: 1 }}>{hasScore ? scoreLabel(score) : "Scanning..."}</span>
+                  <span style={{ fontSize: "0.58rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.12em", textTransform: "uppercase" }}>Prototype score</span>
+                  <span style={{ fontSize: "1.1rem", fontWeight: 700, color: hasScore ? color : "rgba(255,255,255,0.4)", lineHeight: 1 }}>{hasScore ? scoreLabel(score) : live.state.connected ? "Waiting for signals" : "Unavailable"}</span>
                   <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.35)" }}>
-                    {!hasScore ? "Collecting signals" : score < 30 ? "No significant signals" : score < 60 ? "Elevated activity detected" : score < 80 ? "Stress indicators present" : "Critical burnout risk"}
+                    {hasScore ? "Experimental score, not a diagnosis" : "No assessment recorded"}
                   </span>
                 </div>
               </div>
@@ -416,13 +417,12 @@ export default function Home() {
               {/* Stats - value on top, label below */}
               <div style={{ display: "flex", alignItems: "flex-start", flex: 1, gap: "clamp(1.2rem, 3vw, 3rem)", flexWrap: "wrap" }}>
                 {[
-                  { value: "3",       label: "Sensors Active",   color: "#4ade80",              dot: true  },
-                  { value: "<50ms",   label: "Detection Speed",  color: "#60a5fa",              dot: true  },
-                  { value: "Groq AI", label: "Model",            color: "#a78bfa",              dot: true  },
-                  { value: "100%",    label: "On-device",        color: "#f59e0b",              dot: true  },
-                  { value: vitals ? `${vitals.mouse_velocity.toFixed(0)} px/s` : "0 px/s",   label: "Movement",  color: "rgba(255,255,255,0.78)", dot: false },
-                  { value: vitals ? `${vitals.key_rate.toFixed(0)} bpm`        : "0 bpm",    label: "Key Rate",  color: vitals && vitals.key_rate < 60 ? "#ef4444" : "rgba(255,255,255,0.78)", dot: vitals ? vitals.key_rate < 60 : false },
-                  { value: vitals ? `${(vitals.idle_ratio * 100).toFixed(0)}%` : "10%",     label: "Idle",      color: "rgba(255,255,255,0.78)", dot: false },
+                  { value: String(Object.values(live.state.sources).filter(Boolean).length), label: "Backend sources", color: "#4ade80", dot: true },
+                  { value: live.state.connected ? "Online" : "Offline", label: "Backend", color: "#60a5fa", dot: true },
+                  { value: "Optional", label: "Provider chat", color: "#a78bfa", dot: false },
+                  { value: vitals ? `${vitals.mouse_velocity.toFixed(0)} px/s` : "Unavailable", label: "Movement", color: "rgba(255,255,255,0.78)", dot: false },
+                  { value: vitals ? `${vitals.key_rate.toFixed(0)}/min` : "Unavailable", label: "Key rate", color: "rgba(255,255,255,0.78)", dot: false },
+                  { value: vitals ? `${(vitals.idle_ratio * 100).toFixed(0)}%` : "Unavailable", label: "Idle", color: "rgba(255,255,255,0.78)", dot: false },
                 ].map(s => (
                   <div key={s.label} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -489,8 +489,8 @@ export default function Home() {
                   style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }}
                 />
                 <div>
-                  <div style={{ fontSize: "0.84rem", fontWeight: 600, color: "#fff" }}>Live Session</div>
-                  <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)" }}>Session in progress</div>
+                  <div style={{ fontSize: "0.84rem", fontWeight: 600, color: "#fff" }}>{live.state.connected ? "Connected session" : "Backend offline"}</div>
+                  <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)" }}>{live.state.connected ? "Receiving backend updates" : "No live assessment available"}</div>
                 </div>
               </div>
 

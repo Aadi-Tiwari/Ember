@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ember - Burnout Detection",
-  description: "Early burnout detection through behavioral pattern analysis. No messages read.",
+  title: "Ember - Experimental Wellness Signals",
+  description: "A local dashboard for experimental activity, face, voice, and optional chat signals. Not a validated diagnosis.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

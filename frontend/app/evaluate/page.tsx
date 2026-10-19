@@ -34,8 +34,8 @@ function riskColor(s: number) {
   if (s < 80) return "#fb923c"; return "#f87171";
 }
 function riskLabel(s: number) {
-  if (s < 30) return "Low Risk"; if (s < 60) return "Moderate";
-  if (s < 80) return "High Risk"; return "Critical";
+  if (s < 30) return "Lower score"; if (s < 60) return "Middle range";
+  if (s < 80) return "Higher score"; return "Elevated score";
 }
 function riskGradient(s: number) {
   if (s < 30) return "linear-gradient(90deg,#4ade80,#10b981)";
@@ -61,52 +61,18 @@ function sensorGradient(label: string) {
 }
 
 function interpret(score: number, readings: SensorReading[]): string {
-  const em = readings.find(r => r.label === "Emotion");
-  const vo = readings.find(r => r.label === "Voice");
-  const ac = readings.find(r => r.label === "Activity");
-  if (score < 30) return "The combined prototype score is low.";
-  if (score < 60) {
-    const flags = [em?.score && em.score > 40 ? "mild facial stress" : null, vo?.score && vo.score > 40 ? "reduced vocal energy" : null, ac?.score && ac.score > 40 ? "lower activity" : null].filter(Boolean);
-    return flags.length ? `Mild signals detected - ${flags.join(" and ")}. Consider a short break.` : "Some mild stress signals present. A short break could help.";
-  }
-  if (score < 80) return "The combined prototype score is elevated. Consider taking a break.";
-  return "Critical signals detected. Step away, hydrate, and consider talking to someone you trust.";
+  return `The combined prototype score is ${score.toFixed(1)}/100 from ${readings.length} recorded signal types. This is not a diagnosis or a validated measure of burnout.`;
 }
 
 function getInsights(readings: SensorReading[]): string[] {
-  return readings.map(r => {
-    if (r.label === "Emotion") {
-      if (r.score < 30) return "Facial signals are healthy - expression patterns and eye openness show no stress markers.";
-      if (r.score < 60) return "Mild facial stress is present - expression rigidity or reduced eye openness suggests early fatigue.";
-      return "Facial signals are elevated - expression patterns and blink rate indicate clear cognitive strain.";
-    }
-    if (r.label === "Voice") {
-      if (r.score < 30) return "Voice analysis is clean - vocal energy and pitch stability are within a healthy range.";
-      if (r.score < 60) return "Your voice shows reduced energy with some instability, commonly preceding vocal fatigue.";
-      return "Voice signals are significantly elevated - low energy combined with high pitch variation indicates strain.";
-    }
-    if (r.label === "Activity") {
-      if (r.score < 30) return "Activity patterns look normal - keyboard engagement and idle ratio suggest focused presence.";
-      if (r.score < 60) return "Activity is below typical engagement levels - reduced typing rate signals mental fatigue.";
-      return "Activity patterns show notable disengagement - erratic behavior is a recognized burnout signal.";
-    }
-    return r.finding;
-  });
+  return readings.map(reading => `${reading.label}: recorded prototype score ${reading.score.toFixed(1)}/100. These signals can have many explanations.`);
 }
 
-function getRecs(score: number, readings: SensorReading[]): string[] {
-  const out: string[] = [];
-  const vo = readings.find(r => r.label === "Voice");
-  const ac = readings.find(r => r.label === "Activity");
-  const em = readings.find(r => r.label === "Emotion");
-  if (score >= 60) out.push("Take a 15-20 minute break away from all screens");
-  else if (score >= 30) out.push("Take a 5-minute break and step outside if possible");
-  if (score >= 30) out.push("Box breathing: 4s inhale - 4s hold - 4s exhale - 4s hold");
-  if (vo?.score && vo.score > 35) out.push("Rest your voice - avoid calls or extra talking for a bit");
-  if (ac?.score && ac.score > 40) out.push("Move your body - even a 2-minute walk resets your state");
-  if (em?.score && em.score > 50) out.push("Ground yourself: name 5 things you can see right now");
-  if (score >= 70) out.push("Consider reaching out to a friend, counselor, or the 988 Lifeline");
-  return out.slice(0, 4);
+function getRecs(): string[] {
+  return [
+    "Review which sensors contributed and whether their inputs were representative.",
+    "Treat this session as an experimental observation, not a health assessment.",
+  ];
 }
 
 function ScoreRing({ score, color }: { score: number; color: string }) {
@@ -154,7 +120,7 @@ export default function EvaluatePage() {
   const color    = riskColor(session.score);
   const summary  = interpret(session.score, session.readings);
   const insights = getInsights(session.readings);
-  const recs     = getRecs(session.score, session.readings);
+  const recs     = getRecs();
   const ts       = new Date(session.timestamp);
   const mins     = Math.floor(session.duration / 60);
   const secs     = session.duration % 60;
@@ -205,7 +171,7 @@ export default function EvaluatePage() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.38), marginBottom: 8 }}>Overall Burnout Risk</p>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.38), marginBottom: 8 }}>Overall prototype score</p>
                 <p style={{ fontSize: "1rem", lineHeight: 1.65, color: W(0.7) }}>{summary}</p>
                 <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: W(0.5) }}>Only sensors with readings are included; missing sensors are not assessed.</p>
               </div>
@@ -224,7 +190,7 @@ export default function EvaluatePage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
             style={{ ...GC, padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.45) }}>Burnout Risk Spectrum</span>
+              <span style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.45) }}>Prototype score bands</span>
               <span style={{ ...badgeStyle(session.score) }}>{session.score} / 100</span>
             </div>
             <div style={{ position: "relative" }}>
@@ -241,7 +207,7 @@ export default function EvaluatePage() {
               />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-              {[{ l: "Low Risk", r: "0-29", c: "#4ade80" }, { l: "Moderate", r: "30-59", c: "#facc15" }, { l: "High Risk", r: "60-79", c: "#fb923c" }, { l: "Critical", r: "80+", c: "#f87171" }].map(z => (
+              {[{ l: "Lower score", r: "0-29", c: "#4ade80" }, { l: "Middle range", r: "30-59", c: "#facc15" }, { l: "Higher score", r: "60-79", c: "#fb923c" }, { l: "Elevated score", r: "80+", c: "#f87171" }].map(z => (
                 <div key={z.l} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <div style={{ width: 20, height: 4, borderRadius: 999, background: z.c }} />
                   <span style={{ fontSize: "0.72rem", color: z.c === color ? "#fff" : W(0.35), fontWeight: z.c === color ? 600 : 400 }}>{z.l}</span>

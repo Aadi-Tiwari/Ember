@@ -69,7 +69,7 @@ export default function LoginPage() {
         >
           <Activity size={20} color="var(--amber)" />
         </div>
-        <span className="text-lg font-bold tracking-tight">Ember</span>
+        <a href="/" className="text-lg font-bold tracking-tight" aria-label="Ember home">Ember</a>
       </motion.div>
 
       <motion.div
