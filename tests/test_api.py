@@ -45,7 +45,7 @@ def test_unconfigured_chat_does_not_contact_a_provider(client):
     assert client.get("/health").status_code == 200
 
 
-def test_chat_awaits_provider_and_separates_assessment(client, monkeypatch):
+def test_chat_awaits_provider_and_discards_legacy_hidden_scores(client, monkeypatch):
     import openai
 
     message = SimpleNamespace(content='Let us talk.<assessment>{"score":150,"finding":"Example"}</assessment>')
@@ -58,7 +58,7 @@ def test_chat_awaits_provider_and_separates_assessment(client, monkeypatch):
     response = client.post("/api/chat", json={"messages": [{"role": "user", "content": "Hello"}], "last_user_message": "Hello"})
     assert response.json() == {"reply": "Let us talk."}
     completion.assert_awaited_once()
-    assert main.store.get_chat()["ai_score"] == 100
+    assert main.store.get_chat() == {"text": "Hello"}
 
 
 def test_cors_rejects_an_unrelated_website(client):

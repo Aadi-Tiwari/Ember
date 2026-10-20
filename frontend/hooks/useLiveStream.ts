@@ -6,7 +6,7 @@ export type SensorReading = { label: string; score: number; finding: string; con
 export type AttentionWeight = { label: string; pct: number; zscore: number };
 
 type Vitals = { mouse_velocity: number; key_rate: number; idle_ratio: number };
-type Sources = { activity: boolean; emotion: boolean; voice: boolean };
+type Sources = { activity: boolean; emotion: boolean; voice: boolean; chat: boolean };
 
 export type LiveState = {
   connected: boolean;
@@ -28,7 +28,7 @@ const EMPTY: LiveState = {
   readings: [],
   riskScore: null,
   vitals: null,
-  sources: { activity: false, emotion: false, voice: false },
+  sources: { activity: false, emotion: false, voice: false, chat: false },
   attentionWeights: [],
 };
 
@@ -55,7 +55,7 @@ export function useLiveStream() {
       try { msg = JSON.parse(evt.data); }
       catch { setState(prev => ({ ...prev, error: "The backend sent an unreadable update." })); return; }
       if (msg.type === "waiting") {
-        setState(prev => ({ ...prev, waiting: true, riskScore: null, readings: [] }));
+        setState({ ...EMPTY, connected: true, waiting: true });
       } else if (msg.type === "update") {
         setState({
           connected: true,
@@ -64,7 +64,7 @@ export function useLiveStream() {
           readings: msg.readings ?? [],
           riskScore: msg.risk_score ?? null,
           vitals: msg.vitals ?? null,
-          sources: msg.sources ?? { activity: false, emotion: false, voice: false },
+          sources: msg.sources ?? EMPTY.sources,
           attentionWeights: msg.attention_weights ?? [],
         });
       }

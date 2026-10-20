@@ -1,184 +1,107 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Send } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, ArrowUp, MessageCircle, RotateCcw } from "lucide-react";
+import { BASE } from "../lib/api";
+import { EmberMark } from "./Workspace";
 
-type Role    = "user" | "assistant";
-type Message = { id: string; role: Role; content: string; ts: Date };
-type Props   = { active: boolean };
+type Message = { id: string; role: "user" | "assistant"; content: string };
 
-function TypingDots() {
-  return (
-    <div className="flex items-center gap-1 px-4 py-3">
-      {[0, 1, 2].map(i => (
-        <motion.div key={i} className="w-1.5 h-1.5 rounded-full"
-          style={{ background: "var(--muted)" }}
-          animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
-          transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.18 }} />
-      ))}
-    </div>
-  );
-}
-
-function EmberAvatar() {
-  return (
-    <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-      style={{ background: "var(--amber)", color: "#000", fontSize: 10, fontWeight: 700 }}>
-      E
-    </div>
-  );
-}
-
-function autoResize(e: React.ChangeEvent<HTMLTextAreaElement>) {
-  e.target.style.height = "auto";
-  e.target.style.height = Math.min(e.target.scrollHeight, 80) + "px";
-}
-
-export default function ChatPanel({ active }: Props) {
+export default function ChatPanel({ active }: { active: boolean }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput]       = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [started, setStarted]   = useState(false);
-  const bottomRef   = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [input, setInput] = useState("");
+  const [started, setStarted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+    if (!active) {
+      requestRef.current?.abort();
+      setMessages([]);
+      setStarted(false);
+      setLoading(false);
+      setInput("");
+      setError("");
+    }
+    return () => requestRef.current?.abort();
+  }, [active]);
 
-  const callAI = useCallback(async (history: Message[], lastUserText = "") => {
+  useEffect(() => {
+    const container = messagesRef.current;
+    container?.scrollTo({ top: container.scrollHeight, behavior: reducedMotion ? "instant" : "smooth" });
+  }, [messages, loading, reducedMotion]);
+
+  useEffect(() => {
+    if (started && !loading && active) inputRef.current?.focus({ preventScroll: true });
+  }, [started, loading, active]);
+
+  async function reply(history: Message[]) {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
+    setError("");
     try {
-      const res = await fetch(`${API_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages:          history.map(m => ({ role: m.role, content: m.content })),
-          last_user_message: lastUserText,
-        }),
+      const response = await fetch(`${BASE}/api/chat`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history.map(({ role, content }) => ({ role, content })) }),
+        signal: controller.signal,
       });
-      const data = await res.json();
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(), role: "assistant",
-        content: data.reply ?? "I'm here with you.",
-        ts: new Date(),
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.reply || "The conversation could not continue. Please retry.");
+      if (!controller.signal.aborted) setMessages(previous => [...previous, {
+        id: crypto.randomUUID(), role: "assistant", content: payload.reply,
       }]);
-    } catch {
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(), role: "assistant",
-        content: "Connection issue - make sure the backend is running.",
-        ts: new Date(),
-      }]);
+    } catch (failure) {
+      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "The backend is unavailable. Please retry.");
+    } finally {
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
-    setLoading(false);
-  }, []);
+  }
 
-  // Auto-start: Ember greets first when tab opens
-  useEffect(() => {
-    if (active && !started) {
-      setStarted(true);
-      callAI([]);
-    }
-  }, [active, started, callAI]);
+  function start() {
+    if (!active || loading) return;
+    setStarted(true);
+    void reply([]);
+  }
 
-  async function send() {
-    const trimmed = input.trim();
-    if (!trimmed || loading || !active) return;
-    const userMsg: Message = {
-      id: crypto.randomUUID(), role: "user", content: trimmed, ts: new Date(),
-    };
-    const updated = [...messages, userMsg];
-    setMessages(updated);
+  function send() {
+    const content = input.trim();
+    if (!content || !active || loading) return;
+    const history = [...messages, { id: crypto.randomUUID(), role: "user" as const, content }];
+    setMessages(history);
     setInput("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-    await callAI(updated, trimmed);
+    void reply(history);
   }
 
-  function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-  }
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
-        <AnimatePresence initial={false}>
-          {messages.map(m => (
-            <motion.div key={m.id}
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18 }}
-              className={`flex gap-2.5 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-
-              {m.role === "assistant" && <EmberAvatar />}
-
-              <div className="flex flex-col gap-0.5 max-w-[78%]">
-                <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                  m.role === "user" ? "rounded-br-sm" : "rounded-bl-sm"
-                }`}
-                  style={{
-                    background: m.role === "user" ? "var(--amber)"    : "var(--surface-2)",
-                    color:      m.role === "user" ? "#000"            : "var(--text)",
-                    border:     m.role === "assistant" ? "1px solid var(--border)" : "none",
-                  }}>
-                  {m.content}
-                </div>
-                <span className={`text-xs ${m.role === "user" ? "text-right" : ""}`}
-                  style={{ color: "var(--muted-2)" }}>
-                  {m.ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {/* Typing indicator */}
-        {loading && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="flex items-start gap-2.5">
-            <EmberAvatar />
-            <div className="rounded-2xl rounded-bl-sm"
-              style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-              <TypingDots />
-            </div>
-          </motion.div>
-        )}
-
-        <div ref={bottomRef} />
+  return <div className="chat-panel">
+    <div className="panel-heading"><div className="panel-label"><span className="icon-tile icon-blue"><MessageCircle size={18} /></span><div><h3>Talk it through</h3><p>A conversation with Ember</p></div></div><span className="chat-orb" aria-hidden="true" /></div>
+    {!started ? <div className="chat-empty">
+      <div className="chat-preview" aria-hidden="true"><span /><span /><span /></div>
+      <h4>What's been on your mind?</h4><p>Workload, sleep, the things that feel different. Start wherever you are.</p>
+      <button type="button" className="button button-secondary" disabled={!active} onClick={start}>Start conversation <ArrowRight size={14} /></button>
+      {!active && <small>Start a collection session first.</small>}
+    </div> : <>
+      <div ref={messagesRef} className="chat-messages" role="log" aria-label="Conversation messages" aria-live="polite">
+        {messages.map(message => <motion.div key={message.id} className={`chat-message message-${message.role}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
+          {message.role === "assistant" && <EmberMark small />}<p>{message.content}</p>
+        </motion.div>)}
+        {loading && <div className="chat-typing" role="status"><EmberMark small /><span><i /><i /><i /></span><span className="sr-only">Ember is responding.</span></div>}
+        {error && <div className="chat-error"><p role="alert">{error}</p><button type="button" onClick={() => void reply(messages)} disabled={loading || !active}><RotateCcw size={12} /> Retry</button></div>}
       </div>
-
-      {/* Input */}
-      <div className="px-4 pb-4 pt-3 flex items-end gap-2"
-        style={{ borderTop: "1px solid var(--border)" }}>
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={e => { setInput(e.target.value); autoResize(e); }}
-          onKeyDown={onKey}
-          placeholder={loading ? "Ember is typing..." : "Type your message..."}
-          disabled={loading || !active}
-          rows={1}
-          className="flex-1 resize-none text-sm leading-relaxed outline-none"
-          style={{
-            background: "transparent", color: "var(--text)",
-            caretColor: "var(--amber)", border: "none",
-            maxHeight: 80, overflowY: "auto",
-          }}
-        />
-        <button onClick={send}
-          disabled={!input.trim() || loading || !active}
-          className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
-          style={{
-            background:  input.trim() && !loading ? "var(--amber)" : "var(--surface-2)",
-            border:      "1px solid var(--border)",
-            transition:  "background 0.15s",
-            cursor:      input.trim() && !loading ? "pointer" : "default",
-          }}>
-          <Send size={13} color={input.trim() && !loading ? "#000" : "var(--muted)"} />
-        </button>
-      </div>
-    </div>
-  );
+      <form className="chat-composer" onSubmit={event => { event.preventDefault(); send(); }}>
+        <textarea ref={inputRef} value={input} onChange={event => setInput(event.target.value)} rows={2} maxLength={6000} aria-label="Message Ember" placeholder="Write what's on your mind..." disabled={!active || loading}
+          onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
+        <button type="submit" aria-label="Send message" disabled={!input.trim() || loading || !active}><ArrowUp size={17} /></button>
+      </form>
+    </>}
+    <p className="chat-disclosure">Messages go to your configured AI provider.</p>
+  </div>;
 }

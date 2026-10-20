@@ -65,8 +65,10 @@ function calcCentroid(freqData: Uint8Array, sr: number): number {
   return sum < 0.01 ? 0 : Math.min(1, (wSum / sum) / 3000);
 }
 
-export function useVoiceAnalyzer(active: boolean): VoiceData | null {
+export function useVoiceAnalyzer(active: boolean) {
   const [data, setData] = useState<VoiceData | null>(null);
+  const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
 
   // Keep refs so the intervals always see the latest values
   const rmsRef   = useRef<number[]>([]);
@@ -76,6 +78,8 @@ export function useVoiceAnalyzer(active: boolean): VoiceData | null {
   useEffect(() => {
     if (!active) {
       setData(null);
+      setReady(false);
+      setError("");
       rmsRef.current   = [];
       pitchRef.current = [];
       frameRef.current = 0;
@@ -105,7 +109,8 @@ export function useVoiceAnalyzer(active: boolean): VoiceData | null {
         // Create AudioContext and RESUME it (critical - browsers suspend by default)
         audioCtx = new AudioContext({ sampleRate: 44100 });
         await audioCtx.resume();
-        if (!alive) { audioCtx.close(); stream.getTracks().forEach(t => t.stop()); return; }
+        if (!alive) { audioCtx.close().catch(() => {}); stream.getTracks().forEach(t => t.stop()); return; }
+        setReady(true);
 
         const analyser = audioCtx.createAnalyser();
         analyser.fftSize                = FFT_SIZE;
@@ -160,7 +165,12 @@ export function useVoiceAnalyzer(active: boolean): VoiceData | null {
         }, SEND_MS);
 
       } catch {
-        // Mic permission denied or device unavailable - fail silently
+        stream?.getTracks().forEach(track => track.stop());
+        audioCtx?.close().catch(() => {});
+        if (alive) {
+          setReady(false);
+          setError("Microphone unavailable. Check permission and your input device, then retry.");
+        }
       }
     })();
 
@@ -177,7 +187,7 @@ export function useVoiceAnalyzer(active: boolean): VoiceData | null {
     };
   }, [active]);
 
-  return data;
+  return { data, error, ready };
 }
 
 function buildVoiceData(

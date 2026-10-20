@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, CameraOff, Loader, Eye, Activity, Layers } from "lucide-react";
+import { Camera, CameraOff, Eye, ScanFace, Layers } from "lucide-react";
 
 // MediaPipe's WASM module routes its C++ stderr through console.error, producing
 // "INFO: Created TensorFlow Lite XNNPACK delegate for CPU." on every detection call.
@@ -68,9 +68,9 @@ function headPose(m: number[]) {
   };
 }
 
-type Props = { onEmotion?: (e: EmotionScores, score: number, eyeOpen: number) => void };
+type Props = { enabled?: boolean; onEmotion?: (e: EmotionScores, score: number, eyeOpen: number) => void };
 
-export default function FaceCam({ onEmotion }: Props) {
+export default function FaceCam({ enabled = true, onEmotion }: Props) {
   const videoRef       = useRef<HTMLVideoElement>(null);
   const canvasRef      = useRef<HTMLCanvasElement>(null);
   const landmarkerRef  = useRef<any>(null);
@@ -81,6 +81,9 @@ export default function FaceCam({ onEmotion }: Props) {
   const lastTsRef      = useRef(0);       // guarantees monotonic timestamps
   const showOverlayRef = useRef(true);
   const onEmotionRef   = useRef(onEmotion);
+  const mountedRef = useRef(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const captureRef = useRef(0);
 
   // All state before any effects
   const [phase, setPhase]             = useState<"idle" | "loading" | "active">("idle");
@@ -95,6 +98,17 @@ export default function FaceCam({ onEmotion }: Props) {
   useEffect(() => { onEmotionRef.current = onEmotion; }, [onEmotion]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      captureRef.current += 1;
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      landmarkerRef.current?.landmarker.close();
+      landmarkerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     showOverlayRef.current = showOverlay;
     if (!showOverlay) {
       const ctx = canvasRef.current?.getContext("2d");
@@ -103,6 +117,8 @@ export default function FaceCam({ onEmotion }: Props) {
   }, [showOverlay]);
 
   async function start() {
+    if (!enabled || phase !== "idle") return;
+    const capture = ++captureRef.current;
     setError(""); setPhase("loading");
     try {
       const { FaceLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
@@ -123,14 +139,23 @@ export default function FaceCam({ onEmotion }: Props) {
         minTrackingConfidence: 0.4,
       } as any);
 
+      if (!mountedRef.current || capture !== captureRef.current) { landmarker.close(); return; }
       landmarkerRef.current = { landmarker, FaceLandmarker };
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
         audio: false,
       });
+      if (!mountedRef.current || capture !== captureRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
+      streamRef.current = stream;
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      if (!mountedRef.current || capture !== captureRef.current) return;
       setPhase("active");
     } catch (e: any) {
+      if (!mountedRef.current || capture !== captureRef.current) return;
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      landmarkerRef.current?.landmarker.close();
+      landmarkerRef.current = null;
+      if (!mountedRef.current) return;
       setError(
         e?.name === "NotAllowedError" ? "Camera permission denied" :
         e?.name === "NotFoundError"   ? "No camera found" :
@@ -140,16 +165,22 @@ export default function FaceCam({ onEmotion }: Props) {
     }
   }
 
-  function stop() {
+  const stop = useCallback(() => {
+    captureRef.current += 1;
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
     const v = videoRef.current;
     if (v?.srcObject) (v.srcObject as MediaStream).getTracks().forEach(t => t.stop());
     const c = canvasRef.current;
     if (c) canvasRef.current?.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+    landmarkerRef.current?.landmarker.close();
     landmarkerRef.current = null;
     lastVideoTime.current = -1; lastTsRef.current = 0;
     setPhase("idle"); setEmotions(null); setFaceFound(false); setPose(null);
     smoothRef.current = null; blinkBuf.current = [];
-  }
+  }, []);
+
+  useEffect(() => { if (!enabled) stop(); }, [enabled, stop]);
 
   // Pure detection - does NOT self-schedule
   const detect = useCallback(() => {
@@ -277,10 +308,7 @@ export default function FaceCam({ onEmotion }: Props) {
     };
   }, [phase, detect]);
 
-  const dom      = emotions ? Object.entries(emotions).sort(([,a],[,b])=>(b as number)-(a as number))[0] as [string,number] : null;
-  const domColor = dom ? EMOTION_COLORS[dom[0]] : "var(--amber)";
-  const eyeStatus = eyeOpen > 0.75 ? "Alert" : eyeOpen > 0.5 ? "Tired" : "Drowsy";
-  const eyeColor  = eyeOpen > 0.75 ? "#22c55e" : eyeOpen > 0.5 ? "#f59e0b" : "#ef4444";
+  const eyeStatus = eyeOpen > 0.75 ? "Open" : eyeOpen > 0.5 ? "Partly open" : "Mostly closed";
   const poseLabel = pose ? (
     [
       Math.abs(pose.pitch) > 15 ? (pose.pitch < 0 ? "Head down" : "Head up") : null,
@@ -288,127 +316,34 @@ export default function FaceCam({ onEmotion }: Props) {
     ].filter(Boolean).join(" - ") || "Head centered"
   ) : "";
 
-  return (
-    <div className="rounded-2xl overflow-hidden flex flex-col"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-
-      {/* Camera viewport */}
-      <div className="relative bg-black" style={{ aspectRatio: "4/3", minHeight: 180 }}>
-        <video ref={videoRef} muted playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{ display: phase === "active" ? "block" : "none", transform: "scaleX(-1)" }} />
-        <canvas ref={canvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ display: phase === "active" ? "block" : "none" }} />
-
-        {/* Idle / loading */}
-        {phase !== "active" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
-              {phase === "loading"
-                ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-                    <Loader size={18} color="var(--amber)" />
-                  </motion.div>
-                : <Camera size={18} color="var(--amber)" />}
-            </div>
-            {phase !== "loading" && (
-              <button onClick={start} className="px-4 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
-                style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", color: "var(--amber)" }}>
-                Enable Camera
-              </button>
-            )}
-            {phase === "loading" && (
-              <p className="text-xs" style={{ color: "var(--muted)" }}>Loading AI model...</p>
-            )}
-            {error && <p className="text-xs text-red-400 max-w-xs text-center px-4">{error}</p>}
-          </div>
-        )}
-
-        {/* Active overlays */}
-        {phase === "active" && (
-          <>
-            {dom && faceFound && (
-              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md text-xs font-bold"
-                style={{ background: "rgba(0,0,0,0.75)", color: domColor }}>
-                {dom[0].toUpperCase()} {((dom[1] as number)*100).toFixed(0)}%
-              </div>
-            )}
-            {faceFound && (
-              <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs"
-                style={{ background: "rgba(0,0,0,0.7)", color: eyeColor }}>
-                <Eye size={10} /> {eyeStatus}
-              </div>
-            )}
-            {pose && faceFound && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-md text-xs"
-                style={{ background: "rgba(0,0,0,0.7)", color: "var(--muted)" }}>
-                {poseLabel}
-              </div>
-            )}
-            {perclos > 0.2 && (
-              <motion.div animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
-                className="absolute bottom-2 right-10 px-2 py-0.5 rounded-md text-xs font-semibold"
-                style={{ background: "rgba(239,68,68,0.85)", color: "#fff" }}>
-                Drowsy
-              </motion.div>
-            )}
-            {!faceFound && (
-              <div className="absolute inset-0 flex items-center justify-center"
-                style={{ background: "rgba(0,0,0,0.4)" }}>
-                <p className="text-xs" style={{ color: "var(--muted)" }}>Move closer</p>
-              </div>
-            )}
-            {/* Controls */}
-            <button onClick={() => setShowOverlay(v => !v)}
-              className="absolute top-2 right-8 p-1.5 rounded-md cursor-pointer"
-              style={{ background: "rgba(0,0,0,0.6)", opacity: showOverlay ? 1 : 0.5 }}
-              title={showOverlay ? "Hide mesh" : "Show mesh"}>
-              <Layers size={11} color="#fff" />
-            </button>
-            <button onClick={stop} className="absolute top-2 right-2 p-1.5 rounded-md cursor-pointer"
-              style={{ background: "rgba(0,0,0,0.6)" }}>
-              <CameraOff size={11} color="#fff" />
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Emotion bars */}
-      <AnimatePresence>
-        {emotions && faceFound && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="p-3 flex flex-col gap-2">
-            {/* Eye + pose row */}
-            <div className="flex items-center justify-between text-xs" style={{ color: "var(--muted)" }}>
-              <span style={{ color: eyeColor }}><Eye size={10} className="inline mr-1" />{eyeStatus} · PERCLOS {(perclos*100).toFixed(0)}%</span>
-              {pose && <span>{pose.pitch.toFixed(0)}° P · {pose.yaw.toFixed(0)}° Y</span>}
-            </div>
-            {/* Bars */}
-            {EMOTION_ORDER.map(name => {
-              const val = (emotions as any)[name] as number ?? 0;
-              const pct = Math.min(100, val * 100);
-              const isDom = name === dom?.[0];
-              return (
-                <div key={name} className="flex items-center gap-2">
-                  <span className="text-xs w-14 capitalize"
-                    style={{ color: isDom ? "var(--text)" : "var(--muted)", fontWeight: isDom ? 600 : 400 }}>
-                    {name}
-                  </span>
-                  <div className="flex-1 h-px rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
-                    <motion.div className="h-full rounded-full" style={{ background: EMOTION_COLORS[name] }}
-                      initial={{ width: "0%" }} animate={{ width: `${pct.toFixed(1)}%` }}
-                      transition={{ duration: 0.2 }} />
-                  </div>
-                  <span className="text-xs tabular w-6 text-right" style={{ color: isDom ? domColor : "var(--muted-2)" }}>
-                    {pct.toFixed(0)}
-                  </span>
-                </div>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
+  return <section className="panel media-panel">
+    <div className="panel-heading"><div className="panel-label"><span className="icon-tile icon-mint"><ScanFace size={18} /></span><div><h3>Face</h3><p>Facial observations</p></div></div><span className={`tag ${phase === "active" ? "tag-live" : "tag-neutral"}`}>{phase === "active" ? "Camera on" : phase === "loading" ? "Connecting" : "Off"}</span></div>
+    <div className={`media-viewport camera-viewport ${phase === "active" ? "camera-active" : ""}`}>
+      <video ref={videoRef} muted playsInline aria-label="Your camera preview" style={{ display: phase === "active" ? "block" : "none" }} />
+      <canvas ref={canvasRef} aria-hidden="true" style={{ display: phase === "active" ? "block" : "none" }} />
+      {phase !== "active" && <div className="camera-placeholder" aria-hidden="true">
+        <span className="scan-corner corner-tl" /><span className="scan-corner corner-tr" /><span className="scan-corner corner-bl" /><span className="scan-corner corner-br" />
+        <svg viewBox="0 0 120 130"><ellipse cx="60" cy="52" rx="26" ry="34" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M21 120c0-24 17-37 39-37s39 13 39 37M47 49h3m20 0h3M60 52v13h5M50 73q10 6 20 0" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><circle cx="37" cy="50" r="2" /><circle cx="84" cy="50" r="2" /><circle cx="60" cy="23" r="2" /><circle cx="60" cy="86" r="2" /></svg>
+        {phase === "loading" && <span className="camera-scan" />}
+      </div>}
+      {phase === "active" && <>
+        <span className="camera-label">{faceFound ? "Face tracked" : "Move into the frame"}</span>
+        <div className="camera-tools"><button type="button" className="icon-button" onClick={() => setShowOverlay(value => !value)} aria-label={showOverlay ? "Hide face mesh" : "Show face mesh"} aria-pressed={showOverlay}><Layers size={15} /></button><button type="button" className="icon-button" onClick={stop} aria-label="Turn camera off"><CameraOff size={15} /></button></div>
+      </>}
     </div>
-  );
+    <div className="media-controls">
+      {phase === "idle" ? <><p>{enabled ? "Add facial observations to your session." : "Start collection to enable your camera."}</p><button type="button" className="button button-secondary" onClick={start} disabled={!enabled}><Camera size={14} /> Enable camera</button></>
+        : phase === "loading" ? <><p role="status">Preparing the camera model...</p><button type="button" className="button button-quiet" onClick={stop}>Cancel</button></>
+        : <div className="camera-readings"><span><Eye size={14} /> {faceFound ? eyeStatus : "Waiting for a face"}</span>{faceFound && <span>{poseLabel}</span>}</div>}
+      {error && <p role="alert" className="notice notice-error">{error}</p>}
+    </div>
+    <AnimatePresence>{emotions && faceFound && <motion.details className="feature-details" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <summary>Expression features <span>Heuristic observations</span></summary>
+      <div className="feature-readings">{EMOTION_ORDER.map(name => {
+        const value = Math.min(100, emotions[name as keyof EmotionScores] * 100);
+        return <div key={name}><span>{name}</span><div className="measurement-track"><span style={{ transform: `scaleX(${value / 100})`, background: EMOTION_COLORS[name] }} /></div><small>{value.toFixed(0)}</small></div>;
+      })}<p>Eye closure: {(perclos * 100).toFixed(0)}%. Expression features do not establish how you feel.</p></div>
+    </motion.details>}</AnimatePresence>
+    <div className="media-privacy">Camera frames stay in this browser.</div>
+  </section>;
 }

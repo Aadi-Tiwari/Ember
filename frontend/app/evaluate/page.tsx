@@ -1,358 +1,255 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import {
-  Activity, ArrowLeft, CheckCircle, TrendingUp, TrendingDown,
-  Minus, Clock, Eye, Mic, MessageSquare, Zap,
-} from "lucide-react";
 
-const BG = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Fractal%20Glass%20-%204.jpg-8QPt1A02QgjJIeTqwEYV5thwZXXEGT.jpeg";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, Download, RefreshCw } from "lucide-react";
+import { assessmentRequest, type AssessmentContext, type CheckIn, type Finding, type Report } from "../../lib/assessment";
+import "./assessment.css";
 
-type SensorReading   = { label: string; score: number; finding: string; confidence: number; zscore?: number };
-type AttentionWeight = { label: string; pct: number; zscore: number };
-type SessionData = {
-  score: number; readings: SensorReading[]; attentionWeights: AttentionWeight[];
-  timestamp: string; duration: number;
-};
+const FREQUENCIES = [
+  ["rarely", "Rarely"], ["sometimes", "Sometimes"], ["often", "Often"],
+  ["almost_always", "Almost always"], ["unsure", "Not sure"],
+];
+const QUESTIONS = [
+  { name: "context", label: "Where are these demands coming from?", options: [["work", "Work"], ["study", "Study"], ["other", "Other parts of life"]] },
+  { name: "exhaustion", label: "How often do you feel drained by these demands?", options: FREQUENCIES },
+  { name: "detachment", label: "How often do you feel distant or cynical about what you do?", options: FREQUENCIES },
+  { name: "reduced_effectiveness", label: "How often do you struggle to feel effective at what you do?", options: FREQUENCIES },
+  { name: "duration", label: "How long has this pattern been present?", options: [["days", "A few days"], ["weeks", "Several weeks"], ["months", "Months or longer"], ["unsure", "Not sure"]] },
+  { name: "recovery", label: "How do you feel after time away from these demands?", options: [["rested", "Rested"], ["partly", "Partly recovered"], ["not_rested", "Still drained"], ["unsure", "Not sure"]] },
+];
+const CONCERN = { lower: "Lower concern", moderate: "Moderate concern", elevated: "Elevated concern", uncertain: "More context needed" };
+const OUTLOOK = { may_ease: "May ease", may_persist: "May persist", may_worsen: "May worsen", uncertain: "Outlook uncertain" };
+const SOURCE: Record<string, string> = { vitals: "Activity", emotion: "Face", voice: "Voice", chat: "Chat" };
 
-// ── Glass style helpers ────────────────────────────────────────────────────
-const GC: React.CSSProperties = {
-  background: "rgba(255,255,255,0.08)",
-  backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-  border: "1px solid rgba(255,255,255,0.14)", borderRadius: 24,
-};
-const GR: React.CSSProperties = {
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12,
-};
-const W  = (o: number): string => `rgba(255,255,255,${o})`;
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function riskColor(s: number) {
-  if (s < 30) return "#4ade80"; if (s < 60) return "#facc15";
-  if (s < 80) return "#fb923c"; return "#f87171";
-}
-function riskLabel(s: number) {
-  if (s < 30) return "Lower score"; if (s < 60) return "Middle range";
-  if (s < 80) return "Higher score"; return "Elevated score";
-}
-function riskGradient(s: number) {
-  if (s < 30) return "linear-gradient(90deg,#4ade80,#10b981)";
-  if (s < 60) return "linear-gradient(90deg,#facc15,#f59e0b)";
-  if (s < 80) return "linear-gradient(90deg,#fb923c,#ef4444)";
-  return "linear-gradient(90deg,#ef4444,#dc2626)";
-}
-function badgeStyle(s: number): React.CSSProperties {
-  const c = riskColor(s);
-  return { background: c + "22", border: `1px solid ${c}44`, color: c, borderRadius: 999, padding: "3px 10px", fontSize: "0.7rem", fontWeight: 600 };
-}
-function sensorIcon(label: string) {
-  if (label === "Emotion")  return Eye;
-  if (label === "Voice")    return Mic;
-  if (label === "Activity") return Zap;
-  return MessageSquare;
-}
-function sensorGradient(label: string) {
-  if (label === "Emotion")  return "linear-gradient(135deg,#60a5fa,#a78bfa)";
-  if (label === "Voice")    return "linear-gradient(135deg,#a78bfa,#ec4899)";
-  if (label === "Activity") return "linear-gradient(135deg,#4ade80,#06b6d4)";
-  return "linear-gradient(135deg,#f59e0b,#fb923c)";
+function Findings({ findings, report }: { findings: Finding[]; report: Report }) {
+  return <ul className="assessment-list">{findings.map((finding, index) => (
+    <li key={index}>
+      <p>{finding.text}</p>
+      <div className="evidence-links">{finding.evidence_ids.map(id => (
+        <a key={id} href={`#evidence-${id}`}>
+          {report.evidence.find(item => item.id === id)?.source}: {id.split(".").at(-1)?.replaceAll("_", " ")}
+        </a>
+      ))}</div>
+    </li>
+  ))}</ul>;
 }
 
-function interpret(score: number, readings: SensorReading[]): string {
-  return `The combined prototype score is ${score.toFixed(1)}/100 from ${readings.length} recorded signal types. This is not a diagnosis or a validated measure of burnout.`;
-}
-
-function getInsights(readings: SensorReading[]): string[] {
-  return readings.map(reading => `${reading.label}: recorded prototype score ${reading.score.toFixed(1)}/100. These signals can have many explanations.`);
-}
-
-function getRecs(): string[] {
-  return [
-    "Review which sensors contributed and whether their inputs were representative.",
-    "Treat this session as an experimental observation, not a health assessment.",
-  ];
-}
-
-function ScoreRing({ score, color }: { score: number; color: string }) {
-  const R = 66, C = 2 * Math.PI * R;
-  return (
-    <svg width={168} height={168} viewBox="0 0 168 168">
-      <circle cx={84} cy={84} r={R} fill="none" stroke={W(0.1)} strokeWidth={10} />
-      <motion.circle cx={84} cy={84} r={R} fill="none" stroke={color} strokeWidth={10}
-        strokeLinecap="round" strokeDasharray={C}
-        initial={{ strokeDashoffset: C }}
-        animate={{ strokeDashoffset: C * (1 - score / 100) }}
-        transition={{ duration: 1.4, ease: "easeOut", delay: 0.3 }}
-        style={{ rotate: -90, transformOrigin: "84px 84px" }} />
-      <text x={84} y={78} textAnchor="middle" fill="#fff" fontSize={38} fontWeight={700}
-        fontFamily="system-ui" style={{ fontVariantNumeric: "tabular-nums" }}>{score}</text>
-      <text x={84} y={101} textAnchor="middle" fill={W(0.5)} fontSize={12}>{riskLabel(score)}</text>
-    </svg>
-  );
+function TextList({ items }: { items: string[] }) {
+  return <ul className="assessment-list">{items.map((item, index) => <li key={index}>{item}</li>)}</ul>;
 }
 
 export default function EvaluatePage() {
-  const router = useRouter();
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [loaded, setLoaded]   = useState(false);
+  const [context, setContext] = useState<AssessmentContext | null>(null);
+  const [connectionError, setConnectionError] = useState("");
+  const [requestError, setRequestError] = useState("");
+  const [report, setReport] = useState<Report | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [includeSignals, setIncludeSignals] = useState(false);
+  const [includeChat, setIncludeChat] = useState(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const contextRef = useRef<AbortController | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  useEffect(() => {
-    const raw = localStorage.getItem("ember_session");
-    if (raw) { try { setSession(JSON.parse(raw)); } catch {} }
-    setLoaded(true);
-  }, []);
-
-  if (!loaded) return null;
-
-  if (!session) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <p style={{ color: W(0.4), fontSize: "0.875rem" }}>No session data found.</p>
-        <button onClick={() => router.push("/")} style={{ ...GC, padding: "8px 20px", color: W(0.6), cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: "0.875rem" }}>
-          <ArrowLeft size={13} /> Back to Ember
-        </button>
-      </div>
-    );
+  async function captureContext() {
+    contextRef.current?.abort();
+    const controller = new AbortController();
+    contextRef.current = controller;
+    const { signal } = controller;
+    setChecking(true);
+    setConnectionError("");
+    setIncludeSignals(false);
+    setIncludeChat(false);
+    try {
+      const captured = await assessmentRequest<AssessmentContext>("/api/assessment/context", undefined, signal);
+      if (!signal.aborted) setContext(captured);
+    } catch {
+      if (!signal.aborted) {
+        setContext(null);
+        setConnectionError("The backend is unavailable. Start Ember's local backend, then retry the connection.");
+      }
+    } finally {
+      if (!signal.aborted) setChecking(false);
+    }
   }
 
-  const color    = riskColor(session.score);
-  const summary  = interpret(session.score, session.readings);
-  const insights = getInsights(session.readings);
-  const recs     = getRecs();
-  const ts       = new Date(session.timestamp);
-  const mins     = Math.floor(session.duration / 60);
-  const secs     = session.duration % 60;
+  useEffect(() => {
+    void captureContext();
+    return () => { contextRef.current?.abort(); requestRef.current?.abort(); };
+  }, []);
+
+  useEffect(() => { if (report) headingRef.current?.focus(); }, [report]);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || checking || !context?.available) return;
+    const form = new FormData(event.currentTarget);
+    const checkIn = Object.fromEntries([...QUESTIONS.map(question => question.name), "notes"]
+      .map(name => [name, String(form.get(name) ?? "")])) as CheckIn;
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setBusy(true);
+    setRequestError("");
+    try {
+      const assessment = await assessmentRequest<Report>("/api/assess", {
+        check_in: checkIn, context_id: context.context_id,
+        include_signals: includeSignals, include_chat: includeChat,
+      }, controller.signal);
+      if (!controller.signal.aborted) setReport(assessment);
+    } catch (error) {
+      if (!controller.signal.aborted) setRequestError(error instanceof Error ? error.message : "The assessment could not finish. Please retry.");
+    } finally {
+      if (!controller.signal.aborted) setBusy(false);
+    }
+  }
+
+  function download() {
+    if (!report) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ember-assessment-${report.created_at.slice(0, 10)}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  const sensorSources = context?.sources.filter(source => source !== "chat") ?? [];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#000", position: "relative" }}>
+    <main className="assessment-page original-page">
+      <nav className="assessment-nav" aria-label="Assessment navigation">
+        <Link href="/" className="assessment-brand">EMBER</Link>
+        <Link href="/dashboard"><ArrowLeft size={15} /> Back to session</Link>
+      </nav>
+      <div className="assessment-shell">
+        <header className="assessment-heading">
+          <p className="assessment-eyebrow">Your context. Connected evidence.</p>
+          <h1 ref={headingRef} tabIndex={-1}>{report ? "Your burnout assessment." : "How are you holding up?"}</h1>
+          <p>{report
+            ? "The agents' assessment, the evidence behind it, and what to do next."
+            : "A short check-in helps Ember assess burnout risk and reason about where your current pattern could lead."}</p>
+        </header>
 
-      {/* ── Background ── */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: `url('${BG}')`, backgroundSize: "cover", backgroundPosition: "center" }} />
-      <div style={{ position: "fixed", inset: 0, zIndex: 1, background: "rgba(0,0,0,0.48)" }} />
-
-      {/* ── Content ── */}
-      <div style={{ position: "relative", zIndex: 10 }}>
-
-        {/* Header */}
-        <div style={{ position: "sticky", top: 0, zIndex: 40, padding: "12px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: `1px solid ${W(0.07)}`, background: "rgba(0,0,0,0.3)" }}>
-          <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", gap: 16, height: 44 }}>
-            <button onClick={() => router.push("/")} style={{ display: "flex", alignItems: "center", gap: 6, color: W(0.45), background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", transition: "color 0.2s" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-              onMouseLeave={e => (e.currentTarget.style.color = W(0.45))}>
-              <ArrowLeft size={13} /> Back
-            </button>
-            <div style={{ width: 1, height: 20, background: W(0.1) }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 26, height: 26, borderRadius: 7, background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Activity size={12} color="#f59e0b" />
-              </div>
-              <span style={{ fontWeight: 700, fontSize: "0.875rem", color: "#fff" }}>Ember</span>
-            </div>
-            <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: W(0.4) }}>Session Report</span>
-          </div>
-        </div>
-
-        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 64px", display: "flex", flexDirection: "column", gap: 20 }}>
-
-          {/* ── Hero: Score + Summary ── */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-            style={{ ...GC, padding: 32, display: "grid", gridTemplateColumns: "auto 1fr", gap: 40, alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-              <ScoreRing score={session.score} color={color} />
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: W(0.4) }}>
-                <Clock size={11} />
-                <span style={{ fontSize: "0.7rem" }}>
-                  {ts.toLocaleDateString()} at {ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  {session.duration > 0 && ` · ${mins > 0 ? `${mins}m ` : ""}${secs}s`}
-                </span>
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <div>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.38), marginBottom: 8 }}>Overall prototype score</p>
-                <p style={{ fontSize: "1rem", lineHeight: 1.65, color: W(0.7) }}>{summary}</p>
-                <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: W(0.5) }}>Only sensors with readings are included; missing sensors are not assessed.</p>
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ ...GR, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-                  <CheckCircle size={14} color="#4ade80" />
-                  <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "#4ade80" }}>Backend analysis complete</span>
-                  <span style={{ fontSize: "0.7rem", color: W(0.35), marginLeft: 4 }}>{session.readings.length} sensors fused</span>
-                </div>
-                <div style={{ ...badgeStyle(session.score) }}>{riskLabel(session.score)}</div>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* ── Risk Spectrum ── */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
-            style={{ ...GC, padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.45) }}>Prototype score bands</span>
-              <span style={{ ...badgeStyle(session.score) }}>{session.score} / 100</span>
-            </div>
-            <div style={{ position: "relative" }}>
-              <div style={{ height: 10, borderRadius: 999, overflow: "hidden", display: "flex" }}>
-                <div style={{ background: "#4ade80", width: "30%" }} />
-                <div style={{ background: "#facc15", width: "30%" }} />
-                <div style={{ background: "#fb923c", width: "20%" }} />
-                <div style={{ background: "#f87171", width: "20%" }} />
-              </div>
-              <motion.div style={{ position: "absolute", width: 16, height: 16, borderRadius: "50%", background: color, border: "2.5px solid #000", top: "50%", marginTop: -8 }}
-                initial={{ left: "0%" }}
-                animate={{ left: `calc(${Math.min(96, session.score)}% - 8px)` }}
-                transition={{ delay: 0.7, duration: 0.9, ease: [0.34, 1.56, 0.64, 1] }}
-              />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-              {[{ l: "Lower score", r: "0-29", c: "#4ade80" }, { l: "Middle range", r: "30-59", c: "#facc15" }, { l: "Higher score", r: "60-79", c: "#fb923c" }, { l: "Elevated score", r: "80+", c: "#f87171" }].map(z => (
-                <div key={z.l} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ width: 20, height: 4, borderRadius: 999, background: z.c }} />
-                  <span style={{ fontSize: "0.72rem", color: z.c === color ? "#fff" : W(0.35), fontWeight: z.c === color ? 600 : 400 }}>{z.l}</span>
-                  <span style={{ fontSize: "0.62rem", color: W(0.25), fontFamily: "monospace" }}>{z.r}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* ── Sensor Stat Cards ── */}
-          {session.readings.length > 0 && (
-            <div>
-              <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.38), marginBottom: 14 }}>Sensor Breakdown</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-                {session.readings.map((r, i) => {
-                  const c    = riskColor(r.score);
-                  const Icon = sensorIcon(r.label);
-                  const grad = sensorGradient(r.label);
-                  const TrendIcon = r.score > 59 ? TrendingUp : r.score < 30 ? TrendingDown : Minus;
-                  return (
-                    <motion.div key={r.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2 + i * 0.08 }}
-                      style={{ ...GC, padding: 22, display: "flex", flexDirection: "column", gap: 14, transition: "all 0.3s ease", cursor: "default" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <div style={{ width: 36, height: 36, borderRadius: 10, background: grad, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <Icon size={16} color="#fff" />
-                        </div>
-                        <TrendIcon size={14} color={c} />
-                      </div>
-                      <div>
-                        <p style={{ fontSize: "0.7rem", color: W(0.5), marginBottom: 4 }}>{r.label}</p>
-                        <p style={{ fontSize: "2.2rem", fontWeight: 700, color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{r.score}</p>
-                        <p style={{ fontSize: "0.7rem", color: W(0.4), marginTop: 2 }}>/ 100</p>
-                      </div>
-                      <div>
-                        <div style={{ height: 4, borderRadius: 999, background: W(0.08), overflow: "hidden", marginBottom: 10 }}>
-                          <motion.div style={{ height: "100%", borderRadius: 999, background: riskGradient(r.score) }}
-                            initial={{ width: 0 }} animate={{ width: `${r.score}%` }}
-                            transition={{ delay: 0.35 + i * 0.08, duration: 0.8, ease: "easeOut" }} />
-                        </div>
-                        <p style={{ fontSize: "0.7rem", color: W(0.45), lineHeight: 1.5 }}>{r.finding}</p>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, borderTop: `1px solid ${W(0.07)}` }}>
-                        <span style={{ fontSize: "0.65rem", color: W(0.35) }}>Confidence</span>
-                        <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#fff" }}>{Math.round(r.confidence * 100)}%</span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── Score Drivers + Insights (2-col) ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-
-            {/* Score Drivers */}
-            {session.attentionWeights.length > 0 && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
-                style={{ ...GC, padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.45) }}>Score Drivers</p>
-                {session.attentionWeights.map((w, i) => {
-                  const grad = sensorGradient(w.label);
-                  return (
-                    <div key={w.label} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: "0.8rem", color: "#fff" }}>{w.label}</span>
-                        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#fff" }}>{w.pct.toFixed(0)}%</span>
-                      </div>
-                      <div style={{ height: 8, borderRadius: 999, background: W(0.08), overflow: "hidden" }}>
-                        <motion.div style={{ height: "100%", borderRadius: 999, background: grad }}
-                          initial={{ width: 0 }} animate={{ width: `${w.pct}%` }}
-                          transition={{ delay: 0.5 + i * 0.1, duration: 0.7, ease: "easeOut" }} />
-                      </div>
-                      <span style={{ fontSize: "0.65rem", color: W(0.3), fontFamily: "monospace" }}>
-                        {w.zscore > 0 ? "+" : ""}{w.zscore.toFixed(1)}σ from baseline
-                      </span>
-                    </div>
-                  );
-                })}
-              </motion.div>
-            )}
-
-            {/* What the Data Suggests */}
-            {insights.length > 0 && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}
-                style={{ ...GC, padding: 24, display: "flex", flexDirection: "column", gap: 12 }}>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.45) }}>What the Data Suggests</p>
-                {insights.map((text, i) => {
-                  const r     = session.readings[i];
-                  const c     = r ? riskColor(r.score) : W(0.4);
-                  const label = r?.label ?? "";
-                  return (
-                    <div key={i} style={{ ...GR, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 12 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 72, paddingTop: 1 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: c, flexShrink: 0 }} />
-                        <span style={{ fontSize: "0.72rem", fontWeight: 600, color: c }}>{label}</span>
-                      </div>
-                      <p style={{ fontSize: "0.78rem", lineHeight: 1.5, color: W(0.55), flex: 1 }}>{text}</p>
-                    </div>
-                  );
-                })}
-              </motion.div>
-            )}
-          </div>
-
-          {/* ── Recommendations ── */}
-          {recs.length > 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55 }}
-              style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: W(0.38) }}>Recommended Actions</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {recs.map((rec, i) => (
-                  <div key={i} style={{ ...GC, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 14,
-                    transition: "all 0.3s ease" }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}>
-                    <div style={{ width: 26, height: 26, borderRadius: 8, background: color + "22", border: `1px solid ${color}33`, color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem", fontWeight: 700, flexShrink: 0 }}>
-                      {i + 1}
-                    </div>
-                    <p style={{ fontSize: "0.85rem", lineHeight: 1.55, color: W(0.65) }}>{rec}</p>
-                  </div>
+        {!report ? (
+          <div className="assessment-layout">
+            <form onSubmit={submit} className="assessment-card">
+              <h2>Start with your experience</h2>
+              <p className="assessment-muted">Think about your recent pattern, including days away from work or study. Choose what fits; there are no right answers.</p>
+              <fieldset disabled={busy} className="assessment-fields">
+                {QUESTIONS.map(question => (
+                  <label key={question.name} htmlFor={question.name}>
+                    <span>{question.label}</span>
+                    <select id={question.name} name={question.name} required defaultValue="">
+                      <option value="" disabled>Select an answer</option>
+                      {question.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </label>
                 ))}
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Action ── */}
-          <div style={{ display: "flex", justifyContent: "flex-start", paddingTop: 8 }}>
-            <button onClick={() => router.push("/")} style={{
-              ...GC, padding: "11px 22px",
-              display: "flex", alignItems: "center", gap: 8,
-              color: "#fff", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500,
-              transition: "all 0.2s",
-            }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}>
-              <ArrowLeft size={14} /> New Session
-            </button>
+                <label htmlFor="notes" className="assessment-wide">
+                  <span>What else should Ember understand?</span>
+                  <textarea id="notes" name="notes" rows={4} maxLength={3000} placeholder="Changes in workload, sleep, support, or anything these questions missed." />
+                </label>
+              </fieldset>
+              <fieldset className="assessment-sources" disabled={busy || checking}>
+                <legend>Session evidence</legend>
+                <p className="assessment-muted">{context && context.sources.length
+                  ? `Captured at ${new Date(context.captured_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. This snapshot stays fixed while you answer.`
+                  : "A check-in is enough to begin. No current session signals are available."}</p>
+                <label className="assessment-check">
+                  <input type="checkbox" checked={includeSignals} disabled={!sensorSources.length} onChange={event => setIncludeSignals(event.target.checked)} />
+                  Include session measurements{sensorSources.length ? ` (${sensorSources.map(source => SOURCE[source]).join(", ")})` : ""}
+                </label>
+                <label className="assessment-check">
+                  <input type="checkbox" checked={includeChat} disabled={!context?.sources.includes("chat")} onChange={event => setIncludeChat(event.target.checked)} />
+                  Include my latest chat message
+                </label>
+              </fieldset>
+              <p className="assessment-muted assessment-disclosure">Submitting sends your answers and selected evidence to the configured AI provider. Camera frames and microphone audio stay in your browser. Reports stay on this page unless you download one.</p>
+              {requestError && <p role="alert" className="assessment-error">{requestError}</p>}
+              {!checking && !context?.available && (
+                <p id="assessment-connection-error" role="status" className="assessment-error">
+                  {connectionError || "The model connection is not configured. Add your provider key to Ember's local .env file and restart the backend, then retry. Your answers will stay here."}
+                </p>
+              )}
+              <button
+                className="assessment-primary"
+                disabled={busy || checking}
+                type={context?.available ? "submit" : "button"}
+                aria-describedby={!checking && !context?.available ? "assessment-connection-error" : undefined}
+                onClick={!context?.available ? () => void captureContext() : undefined}
+              >
+                {busy ? "Reviewing your check-in..." : checking ? "Checking connection..." : context?.available ? "Run burnout assessment" : "Retry connection"} <ArrowRight size={17} />
+              </button>
+              {busy && <p role="status" className="assessment-muted">Context and signal agents review the evidence, then the assessment agent brings their findings together.</p>}
+            </form>
+            <aside className="assessment-aside">
+              <section className="assessment-card">
+                <p className="assessment-eyebrow">The assessment team</p>
+                <h2>A clearer picture, with reasons.</h2>
+                <ol className="assessment-steps">
+                  <li><strong>Context agent</strong><p>Looks at exhaustion, detachment, effectiveness, and recovery in your own words.</p></li>
+                  <li><strong>Signal agent</strong><p>Examines available measurements and checks other explanations.</p></li>
+                  <li><strong>Assessment agent</strong><p>Reconciles the findings into a risk assessment, a conditional outlook, and follow-up actions.</p></li>
+                </ol>
+              </section>
+              <section className="assessment-card" aria-live="polite">
+                <h2>{checking ? "Connecting..." : context?.available ? "Ready for your check-in" : "Assessment unavailable"}</h2>
+                <p className="assessment-muted">{connectionError || (context?.available
+                  ? "You control which session evidence is included. The check-in works without a camera or microphone."
+                  : "Configure the AI provider in your local backend to run the assessment team.")}</p>
+                {!context?.available && <a className="assessment-text-link" href="https://github.com/Aadi-Tiwari/Ember#run-locally">Local setup guide</a>}
+                <button type="button" className="assessment-secondary" disabled={checking || busy} onClick={() => void captureContext()}>
+                  <RefreshCw size={14} /> Refresh connection and evidence
+                </button>
+              </section>
+            </aside>
           </div>
-
-        </div>
+        ) : (
+          <div className="assessment-report">
+            <section className={`assessment-card assessment-result concern-${report.assessment.concern}`}>
+              <p className="assessment-eyebrow">Burnout risk assessment</p>
+              <h2>{CONCERN[report.assessment.concern]}</h2>
+              <p>{report.assessment.summary}</p>
+              <p className="assessment-muted">Assessed {new Date(report.created_at).toLocaleString()} from this check-in and the evidence you selected.</p>
+            </section>
+            <div className="assessment-report-grid">
+              <section className="assessment-card"><h2>What shaped the assessment</h2><Findings findings={report.assessment.rationale} report={report} /></section>
+              <section className="assessment-card"><p className="assessment-eyebrow">If current demands and recovery continue</p><h2>{OUTLOOK[report.assessment.outlook]}</h2><p>{report.assessment.outlook_basis}</p><p className="assessment-muted">A conditional outlook from this check-in, not a measured trend.</p></section>
+              <section className="assessment-card"><h2>What you can do next</h2><TextList items={report.assessment.next_steps} /></section>
+              <section className="assessment-card"><h2>What remains uncertain</h2><TextList items={report.assessment.uncertainties} /></section>
+            </div>
+            <section className="assessment-card"><h2>Questions worth coming back to</h2><TextList items={report.assessment.follow_up} /></section>
+            <section className="assessment-card">
+              <h2>Read each agent's review</h2>
+              <p className="assessment-muted">Separate review roles use the same configured model. Agreement between them is not a measure of accuracy.</p>
+              {Object.entries(report.reviews).map(([name, review]) => (
+                <details key={name}><summary>{name === "context" ? "Context agent" : "Signal agent"}</summary>
+                  <p>{review.summary}</p><Findings findings={review.findings} report={report} />
+                  <h3>Uncertainties</h3><TextList items={review.uncertainties} />
+                  {review.follow_up.length > 0 && <><h3>Follow-up</h3><TextList items={review.follow_up} /></>}
+                </details>
+              ))}
+            </section>
+            <section className="assessment-card">
+              <details><summary>Evidence used in this assessment</summary>
+                <ul className="assessment-list">{report.evidence.map(item => (
+                  <li id={`evidence-${item.id}`} key={item.id}>
+                    <strong>{item.source}</strong>
+                    {item.received_at && <p className="assessment-muted">Received {new Date(item.received_at).toLocaleString()}</p>}
+                    <p className="assessment-observation">{item.observation}</p>
+                  </li>
+                ))}</ul>
+              </details>
+            </section>
+            <p className="assessment-muted">{report.limitation}</p>
+            <div className="assessment-actions">
+              <button type="button" className="assessment-primary" onClick={download}><Download size={16} /> Download report</button>
+              <button type="button" className="assessment-secondary" onClick={() => { setReport(null); setRequestError(""); void captureContext(); }}>New check-in</button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </main>
   );
 }
